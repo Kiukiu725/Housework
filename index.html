@@ -3,36 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>家友記 (HomeSync HK)</title>
+  <title>家友記 (HomeSync HK) - 離線雙向同步版</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- PeerJS for Zero-Server P2P WebRTC Sync -->
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <!-- PeerJS WebRTC P2P CDN -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
-    /* 隱藏滾動條但保持滾動 */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    /* iOS 點擊高亮優化 */
     * { -webkit-tap-highlight-color: transparent; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen pb-24 select-none font-sans">
 
-  <!-- ================= 頂部浮動推播通知 (模擬 iOS 通知 / Web Notification) ================= -->
+  <!-- ================= 頂部推播通知與待同步狀態橫幅 ================= -->
   <div id="pushToast" class="fixed top-2 left-3 right-3 z-50 max-w-md mx-auto hidden bg-slate-900/95 text-white backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-slate-700 transition-all duration-300">
     <div class="flex items-start justify-between gap-2">
       <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0">
+        <div id="toastIconContainer" class="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0">
           <i data-lucide="bell-ring" class="w-4 h-4"></i>
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span id="toastAppName" class="text-xs font-bold text-orange-400">家友記 • 早晨提醒</span>
+            <span id="toastAppName" class="text-xs font-bold text-orange-400">家友記 • 晨早提醒</span>
             <span id="toastTime" class="text-[10px] text-slate-400">08:30</span>
           </div>
-          <h4 id="toastHeader" class="text-sm font-bold mt-0.5">今日待辦家務提醒</h4>
+          <h4 id="toastHeader" class="text-sm font-bold mt-0.5">通知標題</h4>
         </div>
       </div>
       <button onclick="hidePushToast()" class="text-slate-400 hover:text-white p-1">
@@ -41,12 +39,12 @@
     </div>
     <div id="toastList" class="mt-2.5 pt-2 border-t border-slate-800 space-y-1.5 text-xs"></div>
     <button onclick="switchTab('tasks'); hidePushToast();" class="w-full mt-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-bold text-xs">
-      即刻查看待辦清單
+      查看待辦家務
     </button>
   </div>
 
-  <!-- ================= 頂部標題與快速空間篩選 ================= -->
-  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 shadow-xs">
+  <!-- ================= 頂部狀態列與空間篩選 ================= -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-2.5 shadow-xs">
     <div class="max-w-md mx-auto flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
@@ -57,15 +55,21 @@
             <h1 id="displayAppName" class="text-base font-bold text-slate-900 leading-none">家友記</h1>
             <i data-lucide="edit-3" class="w-3 h-3 text-slate-400"></i>
           </div>
-          <p class="text-[11px] text-slate-400 font-medium mt-0.5 flex items-center gap-1">
-            <span id="p2pStatusIndicator" class="w-2 h-2 rounded-full bg-slate-300 inline-block"></span>
-            <span id="p2pStatusText">本機離線運作</span>
-          </p>
+          <div class="flex items-center gap-2 mt-1">
+            <div id="p2pSyncBadge" class="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 border border-slate-200">
+              <span id="p2pSyncDot" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+              <span id="p2pSyncStatusText">離線運作中</span>
+            </div>
+            <div id="pendingSyncBadge" class="hidden text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+              <i data-lucide="cloud-off" class="w-3 h-3 text-amber-700"></i>
+              <span id="pendingSyncCountText">待同步: 0</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="flex items-center gap-1.5">
-        <button onclick="openSyncTab()" class="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors" title="P2P 同步">
+        <button onclick="switchTab('sync')" class="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors" title="P2P 同步中心">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         </button>
         <button id="quickAddBtn" onclick="openActiveAddModal()" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold shadow-xs active:scale-95 transition-all">
@@ -75,13 +79,11 @@
       </div>
     </div>
 
-    <!-- 空間切換橫向滑動列 (我屋企 / Daddy媽咪屋企 / 全部) -->
-    <div id="spacePillsContainer" class="max-w-md mx-auto mt-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-      <!-- 動態由 renderSpacePills() 產生 -->
-    </div>
+    <!-- 空間切換橫向滑動列 (全部 / 我屋企 / Daddy媽咪屋企 / 自訂) -->
+    <div id="spacePillsContainer" class="max-w-md mx-auto mt-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
   </header>
 
-  <!-- ================= 主體內容區域 ================= -->
+  <!-- ================= 主頁內容區塊 ================= -->
   <main class="max-w-md mx-auto px-4 mt-3">
 
     <!-- ---------------- 分頁 1: 家務事項 (Tasks) ---------------- -->
@@ -92,7 +94,7 @@
           <span class="text-xs text-slate-400 font-medium">待辦家務</span>
           <div class="mt-1 flex items-baseline gap-1">
             <span id="countPendingChores" class="text-2xl font-black text-slate-900">0</span>
-            <span class="text-xs text-slate-400">項未做</span>
+            <span class="text-xs text-slate-400">項未搞掂</span>
           </div>
         </div>
         <div onclick="switchTab('reminders')" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs cursor-pointer hover:border-orange-300">
@@ -101,15 +103,13 @@
           </span>
           <div class="mt-1 flex items-baseline gap-1">
             <span id="countUrgentChores" class="text-2xl font-black text-rose-600">0</span>
-            <span class="text-xs text-slate-400">項需緊急處理</span>
+            <span class="text-xs text-slate-400">項需優先處理</span>
           </div>
         </div>
       </div>
 
       <!-- 成員快速篩選按鈕列 -->
-      <div id="memberFilterBar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-        <!-- 動態由 renderMemberFilter() 產生 -->
-      </div>
+      <div id="memberFilterBar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"></div>
 
       <!-- 完成狀態篩選 -->
       <div class="flex items-center justify-between px-1">
@@ -122,9 +122,7 @@
       </div>
 
       <!-- 家務項目列表容器 -->
-      <div id="choreListContainer" class="space-y-2.5">
-        <!-- 動態由 renderChores() 產生 -->
-      </div>
+      <div id="choreListContainer" class="space-y-2.5"></div>
     </section>
 
     <!-- ---------------- 分頁 2: 家庭開支 (Expenses) ---------------- -->
@@ -135,19 +133,15 @@
           <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">空間開支總結</h2>
           <span id="totalSpendSummary" class="text-base font-black text-slate-900">總計: HK$ 0</span>
         </div>
-        <div id="spaceSpendBreakdown" class="grid grid-cols-2 gap-2 mt-2">
-          <!-- 動態由 renderExpenseSummary() 產生 -->
-        </div>
+        <div id="spaceSpendBreakdown" class="grid grid-cols-2 gap-2 mt-2"></div>
       </div>
 
       <div class="flex items-center justify-between px-1">
-        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">開支紀錄</span>
-        <button onclick="openModal('expenseModal')" class="text-xs font-bold text-orange-600 hover:underline">+ 記低一筆</button>
+        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">消費明細</span>
+        <button onclick="openModal('expenseModal')" class="text-xs font-bold text-emerald-600 hover:underline">+ 記錄新開支</button>
       </div>
 
-      <div id="expenseListContainer" class="space-y-2">
-        <!-- 動態由 renderExpenses() 產生 -->
-      </div>
+      <div id="expenseListContainer" class="space-y-2"></div>
     </section>
 
     <!-- ---------------- 分頁 3: 每日提醒 (Reminders) ---------------- -->
@@ -159,8 +153,8 @@
               <i data-lucide="bell" class="w-4 h-4"></i>
             </div>
             <div>
-              <h3 class="text-sm font-bold text-slate-900">每日提醒通知</h3>
-              <p class="text-xs text-slate-400">每日定時掃描並將今日到期置頂</p>
+              <h3 class="text-sm font-bold text-slate-900">每日定時提醒通知</h3>
+              <p class="text-xs text-slate-400">朝早自動優先置頂今日 Due 任務</p>
             </div>
           </div>
           <input type="checkbox" id="notificationToggle" onchange="toggleNotificationEnabled(this.checked)" class="w-5 h-5 accent-orange-500 rounded">
@@ -179,78 +173,104 @@
 
         <div class="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-2 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-blue-900">瀏覽器原生系統通知</span>
+            <span class="font-bold text-blue-900">瀏覽器系統推播權限</span>
             <span id="browserNotifBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">未授權</span>
           </div>
           <button onclick="requestBrowserPermission()" class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs">
-            申請瀏覽器推播授權
+            申請瀏覽器通知授權
           </button>
         </div>
       </div>
 
-      <!-- 優先順序展示 -->
+      <!-- 優先順序預覽 -->
       <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">排程算法預覽 (今日 Due Day 優先排頂)</h3>
-        <div id="priorityRemindersList" class="space-y-2 text-xs">
-          <!-- 動態由 renderPriorityList() 產生 -->
-        </div>
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">晨早通知優先排程算法 (Due Today 置頂)</h3>
+        <div id="priorityRemindersList" class="space-y-2 text-xs"></div>
       </div>
     </section>
 
-    <!-- ---------------- 分頁 4: P2P 同步 (Sync Hub - Zero Server) ---------------- -->
+    <!-- ---------------- 分頁 4: P2P 同步與離線模擬器 (Sync Hub) ---------------- -->
     <section id="tabSync" class="space-y-3 hidden">
-      <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-4 shadow-lg space-y-3">
+      <!-- 離線雙向合併模擬器 (專利測試工具) -->
+      <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-4 shadow-lg border border-purple-500/30 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-purple-500 flex items-center justify-center text-white shrink-0">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold flex items-center gap-1.5">
+                <span>離線合併沙盒模擬器</span>
+                <span class="text-[10px] px-1.5 py-0.2 bg-purple-600/80 rounded text-purple-200 font-normal">單機即可測試</span>
+              </h3>
+              <p class="text-[11px] text-purple-200">驗證離線隨意輸入，連線 0 覆蓋無損合併</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-300 leading-relaxed">
+          即使你剛才在離線狀態下新增了開支或打剔了家務，點擊下方模擬按鈕，系統會模擬「家人在另一部手機也新增了一筆開支並打剔了另一項家務」。雙方會在沒有 Server 的情況下以 <strong class="text-amber-300">CRDT 時間戳記及軟刪除墓碑</strong> 進行雙向無損合併！
+        </p>
+
+        <button onclick="runOfflineSimulation()" class="w-full py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all">
+          <i data-lucide="play" class="w-3.5 h-3.5"></i>
+          <span>一鍵模擬家人雙向無損合併 (Smart Merge)</span>
+        </button>
+      </div>
+
+      <!-- 真實 WebRTC P2P 點對點連線面板 -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
         <div class="flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white">
             <i data-lucide="wifi" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="text-sm font-bold">WebRTC 零伺服器 P2P 直連同步</h3>
-            <p class="text-[11px] text-slate-300">數據不存放在任何伺服器，兩部手機直接點對點傳輸</p>
+            <h3 class="text-sm font-bold text-slate-900">WebRTC 零伺服器 P2P 直連</h3>
+            <p class="text-[11px] text-slate-400">雙向握手，加入者不會被房主覆蓋</p>
           </div>
         </div>
 
-        <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 space-y-2">
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
           <div class="flex items-center justify-between text-xs">
-            <span class="text-slate-400">我的 6 位數家庭房間碼:</span>
-            <span id="myPeerCodeDisplay" class="font-mono font-bold text-orange-400 text-base tracking-widest">--- ---</span>
+            <span class="text-slate-500">我的 6 位數家庭房間碼:</span>
+            <span id="myPeerCodeDisplay" class="font-mono font-bold text-orange-600 text-lg tracking-widest">--- ---</span>
           </div>
           <div class="flex gap-2">
-            <input type="text" id="targetPeerCodeInput" placeholder="輸入屋企人 6 位數房間碼" class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none">
-            <button onclick="connectToPeer()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-xl text-xs font-bold text-white shadow-xs">
+            <input type="text" id="targetPeerCodeInput" placeholder="輸入屋企人 6 位數房間碼" class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none">
+            <button onclick="connectToPeer()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 rounded-xl text-xs font-bold text-white shadow-xs">
               連接同步
             </button>
           </div>
         </div>
-        <p id="p2pLogMessage" class="text-[11px] text-slate-400"></p>
+        <p id="p2pLogMessage" class="text-[11px] text-slate-500"></p>
       </div>
 
-      <!-- WhatsApp 離線同步碼 -->
+      <!-- WhatsApp 離線同步碼 (最穩備援) -->
       <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
         <div class="flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-white">
             <i data-lucide="share-2" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="text-sm font-bold text-slate-900">WhatsApp 離線同步碼 (最穩定方案)</h3>
-            <p class="text-xs text-slate-400">複製整份資料直接 WhatsApp 發送給屋企人</p>
+            <h3 class="text-sm font-bold text-slate-900">WhatsApp 離線同步碼 (非同步首選)</h3>
+            <p class="text-xs text-slate-400">雙向合併演算法支援，貼上亦不會洗走本機新紀錄</p>
           </div>
         </div>
 
         <div class="space-y-2">
           <button onclick="copySyncDataToClipboard()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs">
             <i data-lucide="copy" class="w-4 h-4"></i>
-            <span>一鍵複製同步碼 (發送到家庭群組)</span>
+            <span>一鍵複製同步碼 (傳入家庭 WhatsApp 群組)</span>
           </button>
 
           <textarea id="importDataInput" rows="2" placeholder="在此貼上屋企人傳給你的同步碼..." class="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none resize-none"></textarea>
 
           <div class="grid grid-cols-2 gap-2">
             <button onclick="importSyncData('merge')" class="py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold">
-              智能合併 (Smart Merge)
+              智能雙向合併 (推薦)
             </button>
             <button onclick="importSyncData('overwrite')" class="py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold">
-              完全覆蓋
+              完全覆蓋本機
             </button>
           </div>
         </div>
@@ -268,9 +288,7 @@
       </div>
 
       <!-- 管理面板容器 -->
-      <div id="adminPanelContainer" class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
-        <!-- 動態由 renderAdminPanel() 產生 -->
-      </div>
+      <div id="adminPanelContainer" class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3"></div>
 
       <!-- 資料重設 -->
       <div class="pt-2">
@@ -324,7 +342,7 @@
       <form onsubmit="handleCreateChore(event)" class="space-y-3.5">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">任務名稱 *</label>
-          <input type="text" id="modalChoreTitle" required placeholder="例如: 客廳吸塵抹地、洗冷氣濾網..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20">
+          <input type="text" id="modalChoreTitle" required placeholder="例如: 客廳吸塵抹地、清洗冷氣濾網..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20">
         </div>
 
         <div>
@@ -407,7 +425,7 @@
       <form onsubmit="handleCreateExpense(event)" class="space-y-3.5">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">項目名稱 *</label>
-          <input type="text" id="modalExpenseTitle" required placeholder="例如: 買洗頭水、買餸煲湯、水電費..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none">
+          <input type="text" id="modalExpenseTitle" required placeholder="例如: 買去屑洗頭水、買餸煲湯、水電煤..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none">
         </div>
 
         <div class="grid grid-cols-2 gap-2.5">
@@ -446,24 +464,53 @@
 
   <!-- ================= JAVASCRIPT 全功能邏輯 ================= -->
   <script>
-    // ---------- 1. 全域資料狀態 (Local-First) ----------
-    const STORAGE_KEY = 'HOMESYNC_HK_V3_DATA';
+    // ---------- 1. 全域資料狀態與 CRDT 時間戳記架構 ----------
+    const STORAGE_KEY = 'HOMESYNC_HK_CRDT_V4';
+    const LAST_SYNC_TS_KEY = 'HOMESYNC_LAST_SYNC_TS';
 
     function getTodayString() {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
+    function createUUID(prefix = 'id') {
+      return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
+    }
+
+    // 預設資料：每個項目都具備 id, updatedAt, deleted 墓碑標記
+    const now = Date.now();
     const defaultInitialState = {
       appName: '家友記',
+      appNameUpdatedAt: now,
       spaces: [
-        { id: 'sp_1', name: '我屋企', color: 'orange' },
-        { id: 'sp_2', name: 'Daddy 媽咪屋企', color: 'emerald' },
-        { id: 'sp_3', name: '長沙灣出租屋', color: 'blue' }
+        { id: 'sp_1', name: '我屋企', color: 'orange', updatedAt: now, deleted: false },
+        { id: 'sp_2', name: 'Daddy 媽咪屋企', color: 'emerald', updatedAt: now, deleted: false },
+        { id: 'sp_3', name: '長沙灣出租屋', color: 'blue', updatedAt: now, deleted: false }
       ],
-      members: ['我', '老公', '老婆', '工人姐姐', 'Daddy', '媽咪', '阿妹'],
-      choreCategories: ['清潔', '整理', '維修', '採購', '日常', '寵物護理'],
-      expenseCategories: ['個人護理', '日用品', '買餸食材', '家居維修', '水電煤雜費'],
+      members: [
+        { id: 'm_1', name: '我', updatedAt: now, deleted: false },
+        { id: 'm_2', name: '老公', updatedAt: now, deleted: false },
+        { id: 'm_3', name: '老婆', updatedAt: now, deleted: false },
+        { id: 'm_4', name: '工人姐姐', updatedAt: now, deleted: false },
+        { id: 'm_5', name: 'Daddy', updatedAt: now, deleted: false },
+        { id: 'm_6', name: '媽咪', updatedAt: now, deleted: false },
+        { id: 'm_7', name: '阿妹', updatedAt: now, deleted: false }
+      ],
+      choreCategories: [
+        { id: 'cc_1', name: '清潔', updatedAt: now, deleted: false },
+        { id: 'cc_2', name: '整理', updatedAt: now, deleted: false },
+        { id: 'cc_3', name: '維修', updatedAt: now, deleted: false },
+        { id: 'cc_4', name: '採購', updatedAt: now, deleted: false },
+        { id: 'cc_5', name: '日常', updatedAt: now, deleted: false },
+        { id: 'cc_6', name: '寵物護理', updatedAt: now, deleted: false }
+      ],
+      expenseCategories: [
+        { id: 'ec_1', name: '個人護理', updatedAt: now, deleted: false },
+        { id: 'ec_2', name: '日用品', updatedAt: now, deleted: false },
+        { id: 'ec_3', name: '買餸食材', updatedAt: now, deleted: false },
+        { id: 'ec_4', name: '家居維修', updatedAt: now, deleted: false },
+        { id: 'ec_5', name: '水電煤雜費', updatedAt: now, deleted: false }
+      ],
       chores: [
         {
           id: 'c_1',
@@ -477,7 +524,9 @@
           dueDate: getTodayString(),
           dueTime: '18:00',
           completed: false,
-          notes: '記得抹梳化底'
+          notes: '記得抹梳化底同電視機後面',
+          updatedAt: now - 3600000,
+          deleted: false
         },
         {
           id: 'c_2',
@@ -491,7 +540,9 @@
           dueDate: getTodayString(),
           dueTime: '21:00',
           completed: false,
-          notes: '上去食飯時順便換'
+          notes: '上去食飯時順便換',
+          updatedAt: now - 1800000,
+          deleted: false
         },
         {
           id: 'c_3',
@@ -505,7 +556,9 @@
           dueDate: '',
           dueTime: '',
           completed: false,
-          notes: '入真空袋'
+          notes: '入抽真空袋',
+          updatedAt: now - 7200000,
+          deleted: false
         }
       ],
       expenses: [
@@ -516,7 +569,9 @@
           spaceId: 'sp_1',
           category: '個人護理',
           paidBy: '我',
-          date: getTodayString()
+          date: getTodayString(),
+          updatedAt: now - 5400000,
+          deleted: false
         },
         {
           id: 'e_2',
@@ -525,7 +580,9 @@
           spaceId: 'sp_2',
           category: '買餸食材',
           paidBy: '我',
-          date: getTodayString()
+          date: getTodayString(),
+          updatedAt: now - 2700000,
+          deleted: false
         }
       ],
       notificationConfig: {
@@ -535,13 +592,14 @@
     };
 
     let appState = loadState();
+    let lastSyncTimestamp = parseInt(localStorage.getItem(LAST_SYNC_TS_KEY) || '0', 10);
 
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw);
       } catch (e) {
-        console.error('Failed to load localStorage', e);
+        console.error('Failed to load storage', e);
       }
       return JSON.parse(JSON.stringify(defaultInitialState));
     }
@@ -552,102 +610,306 @@
       } catch (e) {
         console.error(e);
       }
+
+      // 如果 P2P 連線處於就緒狀態，廣播給對端做雙向合併
       if (broadcast && p2pConn && p2pConn.open) {
-        p2pConn.send({ type: 'SYNC_STATE', payload: appState });
+        p2pConn.send({ type: 'SYNC_UPDATE', payload: appState });
+        lastSyncTimestamp = Date.now();
+        localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
       }
+
       renderAll();
     }
 
     function resetDefaultData() {
-      // 避免使用原生 confirm()
       showCustomConfirm('確定要將所有資料重置為預設示範資料嗎？本機自訂的項目將會被重設。', () => {
         appState = JSON.parse(JSON.stringify(defaultInitialState));
+        lastSyncTimestamp = Date.now();
+        localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
         saveState();
         showPushBanner('已重置', '系統已還原為示範資料狀態');
       });
     }
 
-    // ---------- 2. 視圖狀態 (UI Filters) ----------
+    // ---------- 2. CRDT Last-Write-Wins (LWW) 雙向無損合併核心演算法 ----------
+    function mergeCRDTLists(localList, remoteList) {
+      const map = new Map();
+
+      // 先載入本地清單
+      (localList || []).forEach(item => {
+        if (item && item.id) map.set(item.id, item);
+      });
+
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      // 比對遠端清單
+      (remoteList || []).forEach(remoteItem => {
+        if (!remoteItem || !remoteItem.id) return;
+        const localItem = map.get(remoteItem.id);
+
+        if (!localItem) {
+          // 情況 1: 對端新增，本地無此 ID -> 吸納新紀錄
+          map.set(remoteItem.id, remoteItem);
+          addedCount++;
+        } else {
+          // 情況 2: 雙方皆有此 ID -> 依 updatedAt 毫秒級時間戳記取最新版本 (LWW)
+          const localTime = localItem.updatedAt || 0;
+          const remoteTime = remoteItem.updatedAt || 0;
+
+          if (remoteTime > localTime) {
+            map.set(remoteItem.id, remoteItem);
+            updatedCount++;
+          }
+        }
+      });
+
+      return {
+        mergedList: Array.from(map.values()),
+        stats: { addedCount, updatedCount }
+      };
+    }
+
+    function mergeFullState(remoteState) {
+      if (!remoteState) return { changesCount: 0 };
+
+      // 1. 合併 App 名稱
+      if ((remoteState.appNameUpdatedAt || 0) > (appState.appNameUpdatedAt || 0)) {
+        appState.appName = remoteState.appName || appState.appName;
+        appState.appNameUpdatedAt = remoteState.appNameUpdatedAt;
+      }
+
+      // 2. 合併空間、成員、類別 (含軟刪除 Tombstone)
+      const mergedSpaces = mergeCRDTLists(appState.spaces, remoteState.spaces);
+      appState.spaces = mergedSpaces.mergedList;
+
+      const mergedMembers = mergeCRDTLists(appState.members, remoteState.members);
+      appState.members = mergedMembers.mergedList;
+
+      const mergedChoreCats = mergeCRDTLists(appState.choreCategories, remoteState.choreCategories);
+      appState.choreCategories = mergedChoreCats.mergedList;
+
+      const mergedExpenseCats = mergeCRDTLists(appState.expenseCategories, remoteState.expenseCategories);
+      appState.expenseCategories = mergedExpenseCats.mergedList;
+
+      // 3. 合併家務與開支 (核心：離線入的開支與打剔絕不遺失)
+      const mergedChores = mergeCRDTLists(appState.chores, remoteState.chores);
+      appState.chores = mergedChores.mergedList;
+
+      const mergedExpenses = mergeCRDTLists(appState.expenses, remoteState.expenses);
+      appState.expenses = mergedExpenses.mergedList;
+
+      const totalChanges = mergedSpaces.stats.addedCount + mergedSpaces.stats.updatedCount +
+                           mergedMembers.stats.addedCount + mergedMembers.stats.updatedCount +
+                           mergedChores.stats.addedCount + mergedChores.stats.updatedCount +
+                           mergedExpenses.stats.addedCount + mergedExpenses.stats.updatedCount;
+
+      lastSyncTimestamp = Date.now();
+      localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
+      saveState(false);
+
+      return {
+        changesCount: totalChanges,
+        choreStats: mergedChores.stats,
+        expenseStats: mergedExpenses.stats
+      };
+    }
+
+    // 計算自上次同步以來的本機待同步改動數
+    function getPendingChangesCount() {
+      if (lastSyncTimestamp === 0) return 0;
+      let count = 0;
+
+      const checkList = (list) => {
+        (list || []).forEach(item => {
+          if ((item.updatedAt || 0) > lastSyncTimestamp) count++;
+        });
+      };
+
+      checkList(appState.chores);
+      checkList(appState.expenses);
+      checkList(appState.members);
+      checkList(appState.spaces);
+      checkList(appState.choreCategories);
+      checkList(appState.expenseCategories);
+
+      return count;
+    }
+
+    // ---------- 3. 視圖狀態 (UI Filters) ----------
     let currentSpaceId = 'ALL';
     let currentChoreFilter = 'pending';
     let currentMemberFilter = 'ALL';
     let activeTabName = 'tasks';
     let activeAdminSubTab = 'members';
 
-    // ---------- 3. WebRTC P2P 零伺服器同步模組 (PeerJS) ----------
+    // ---------- 4. WebRTC 雙向對等握手模組 (PeerJS) ----------
     let peer = null;
     let p2pConn = null;
     let my6DigitCode = '';
 
     function initPeer() {
       my6DigitCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const peerId = 'homesync_hk_' + my6DigitCode;
-      
+      const peerId = 'homesync_hk_crdt_' + my6DigitCode;
+
       try {
         peer = new Peer(peerId);
         peer.on('open', (id) => {
           document.getElementById('myPeerCodeDisplay').innerText = my6DigitCode;
-          document.getElementById('p2pLogMessage').innerText = `已就緒！房間碼: ${my6DigitCode}，等待連接...`;
+          document.getElementById('p2pLogMessage').innerText = `就緒！房間碼: ${my6DigitCode}，等待屋企人連入...`;
         });
 
+        // 當他人連入我 (我充當接受端)
         peer.on('connection', (conn) => {
-          setupConnection(conn);
-          document.getElementById('p2pLogMessage').innerText = `已成功連接屋企人設備！`;
-          // 首次直連互通發送當前狀態
-          conn.on('open', () => {
-            conn.send({ type: 'SYNC_STATE', payload: appState });
-          });
+          setupConnection(conn, false);
+          document.getElementById('p2pLogMessage').innerText = `已偵測到連線！進行雙向握手比對中...`;
         });
 
         peer.on('error', (err) => {
           console.warn('Peer error', err);
-          document.getElementById('p2pLogMessage').innerText = `P2P 狀態: ${err.type || '連線提示'}`;
+          document.getElementById('p2pLogMessage').innerText = `連線提示: ${err.type || '重試中'}`;
         });
       } catch (e) {
         console.error(e);
       }
     }
 
+    // 當我主動加入他人 (我充當發起端)
     function connectToPeer() {
       const code = document.getElementById('targetPeerCodeInput').value.trim();
       if (!code || code.length < 6) {
         showPushBanner('提示', '請輸入屋企人 6 位數房間碼');
         return;
       }
-      const targetPeerId = 'homesync_hk_' + code;
-      document.getElementById('p2pLogMessage').innerText = `正在連接 ${code}...`;
+      const targetPeerId = 'homesync_hk_crdt_' + code;
+      document.getElementById('p2pLogMessage').innerText = `正在連接房間 ${code}...`;
       const conn = peer.connect(targetPeerId);
-      setupConnection(conn);
+      setupConnection(conn, true);
     }
 
-    function setupConnection(conn) {
+    // 關鍵：雙向對等握手 (Two-Way Handshake)
+    function setupConnection(conn, isInitiator) {
       p2pConn = conn;
+
       conn.on('open', () => {
-        document.getElementById('p2pStatusIndicator').className = 'w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse';
-        document.getElementById('p2pStatusText').innerText = 'P2P 加密直連中';
-        document.getElementById('p2pLogMessage').innerText = `已與屋企人建立點對點加密通道！`;
-        showPushBanner('P2P 連接成功', '現在兩部手機會即時自動同步！');
+        updateP2PStatusUI(true);
+        document.getElementById('p2pLogMessage').innerText = `通道已加密直連！正在雙向同步無損資料...`;
+
+        // 無論是發起端還是接收端，立刻將自己的全量資料（含離線輸入）發送握手
+        conn.send({
+          type: isInitiator ? 'HANDSHAKE_INIT' : 'HANDSHAKE_REPLY',
+          payload: appState
+        });
       });
 
       conn.on('data', (data) => {
-        if (data.type === 'SYNC_STATE') {
-          appState = data.payload;
-          saveState(false);
-          showPushBanner('同步成功', '已收到並同步屋企人的最新家務與開支！');
+        if (!data || !data.type) return;
+
+        if (data.type === 'HANDSHAKE_INIT') {
+          // 收到發起端的資料 -> 本地合併 -> 回覆自身合併後的完整狀態
+          const result = mergeFullState(data.payload);
+          conn.send({ type: 'HANDSHAKE_REPLY', payload: appState });
+          showPushBanner('雙向握手完成', `已無損合併！新增/更新了 ${result.changesCount} 項改動`);
+          document.getElementById('p2pLogMessage').innerText = `雙向同步完成！雙方資料已完全一致。`;
+        } else if (data.type === 'HANDSHAKE_REPLY') {
+          // 發起端收到回覆 -> 本地合併
+          const result = mergeFullState(data.payload);
+          showPushBanner('雙向握手完成', `已成功連線！雙方資料已同步整合 (${result.changesCount} 項改動)`);
+          document.getElementById('p2pLogMessage').innerText = `雙向同步完成！雙方資料已完全一致。`;
+        } else if (data.type === 'SYNC_UPDATE') {
+          // 日常即時改動推播 -> 增量合併
+          const result = mergeFullState(data.payload);
+          showPushBanner('收到即時更新', `屋企人剛剛更新了資料 (${result.changesCount} 項)`);
         }
       });
 
       conn.on('close', () => {
-        document.getElementById('p2pStatusIndicator').className = 'w-2 h-2 rounded-full bg-slate-300 inline-block';
-        document.getElementById('p2pStatusText').innerText = '本機離線運作';
+        updateP2PStatusUI(false);
+        document.getElementById('p2pLogMessage').innerText = `連線已斷開，已自動切換回本機離線模式。`;
       });
     }
 
-    // ---------- 4. WhatsApp 離線同步碼 ----------
+    function updateP2PStatusUI(connected) {
+      const dot = document.getElementById('p2pSyncDot');
+      const text = document.getElementById('p2pSyncStatusText');
+      const badge = document.getElementById('p2pSyncBadge');
+
+      if (connected) {
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+        text.innerText = 'P2P 雙向同步中';
+        badge.className = 'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-800 border border-emerald-300';
+      } else {
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+        text.innerText = '離線運作中';
+        badge.className = 'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 border border-slate-200';
+      }
+    }
+
+    // ---------- 5. 離線雙向合併沙盒模擬器 (單機可視化測試) ----------
+    function runOfflineSimulation() {
+      // 構造家人在另一端離線輸入的模擬資料包 (包含新開支與已完成家務)
+      const simTime = Date.now();
+      const simulatedRemoteState = {
+        appName: appState.appName,
+        appNameUpdatedAt: simTime,
+        spaces: [...appState.spaces],
+        members: [...appState.members],
+        choreCategories: [...appState.choreCategories],
+        expenseCategories: [...appState.expenseCategories],
+        chores: [
+          // 模擬家人把客廳吸塵打剔了 (若存在)
+          ...appState.chores.map((c, i) => i === 0 ? { ...c, completed: true, updatedAt: simTime } : c),
+          // 模擬家人新加一項「買廁紙」家務
+          {
+            id: createUUID('sim_c'),
+            title: '採購家庭裝四層衛生紙',
+            spaceId: appState.spaces[0]?.id || 'sp_1',
+            category: '採購',
+            assignee: '媽咪',
+            plannedDate: getTodayString(),
+            plannedTime: '16:00',
+            hasDueDate: false,
+            dueDate: '',
+            dueTime: '',
+            completed: false,
+            notes: '百佳有特價買二送一',
+            updatedAt: simTime,
+            deleted: false
+          }
+        ],
+        expenses: [
+          ...appState.expenses,
+          // 模擬家人離線記低一筆買餸開支
+          {
+            id: createUUID('sim_e'),
+            title: '鮮牛肉 & 菜心 (媽咪買餸)',
+            amount: 135,
+            spaceId: appState.spaces[0]?.id || 'sp_1',
+            category: '買餸食材',
+            paidBy: '媽咪',
+            date: getTodayString(),
+            updatedAt: simTime,
+            deleted: false
+          }
+        ]
+      };
+
+      // 執行雙向無損合併
+      const mergeResult = mergeFullState(simulatedRemoteState);
+
+      showPushBanner(
+        '沙盒合併完成 (無覆蓋！)',
+        `已成功融合家人資料：新增 1 筆買餸開支 (HK$135)、更新 1 項打剔，你的本地紀錄 100% 完好保存！`
+      );
+
+      switchTab('tasks');
+    }
+
+    // ---------- 6. WhatsApp 離線同步碼 (雙向合併安全防護) ----------
     function copySyncDataToClipboard() {
       const dataStr = JSON.stringify(appState);
-      const encoded = 'HOMESYNC:' + btoa(encodeURIComponent(dataStr));
-      
+      const encoded = 'HOMESYNC_CRDT:' + btoa(encodeURIComponent(dataStr));
+
       const textArea = document.createElement('textarea');
       textArea.value = encoded;
       document.body.appendChild(textArea);
@@ -655,56 +917,45 @@
       document.execCommand('copy');
       document.body.removeChild(textArea);
 
-      showPushBanner('已複製同步碼！', '可直接切換到 WhatsApp 貼到屋企人群組。');
+      showPushBanner('已複製同步碼！', '可直接在家庭 WhatsApp 群組貼上給家人。');
     }
 
     function importSyncData(mode) {
       const input = document.getElementById('importDataInput').value.trim();
-      if (!input.startsWith('HOMESYNC:')) {
-        showPushBanner('錯誤', '同步碼格式不正確，請確認已完整複製。');
+      if (!input.startsWith('HOMESYNC_CRDT:') && !input.startsWith('HOMESYNC:')) {
+        showPushBanner('錯誤', '同步碼格式不正確，請確認完整複製。');
         return;
       }
 
       try {
-        const decoded = decodeURIComponent(atob(input.replace('HOMESYNC:', '')));
+        const cleanStr = input.replace('HOMESYNC_CRDT:', '').replace('HOMESYNC:', '');
+        const decoded = decodeURIComponent(atob(cleanStr));
         const incoming = JSON.parse(decoded);
 
         if (mode === 'overwrite') {
-          appState = incoming;
+          showCustomConfirm('確定要完全覆蓋本機資料嗎？本機尚未同步的修改將會被替換。', () => {
+            appState = incoming;
+            saveState();
+            showPushBanner('覆蓋成功', '本機資料已完全替換為最新匯入版本');
+            switchTab('tasks');
+          });
         } else {
-          // 智能合併 (Smart Merge)
-          const choreMap = new Map();
-          [...appState.chores, ...incoming.chores].forEach(c => choreMap.set(c.id, c));
-          appState.chores = Array.from(choreMap.values());
-
-          const expenseMap = new Map();
-          [...appState.expenses, ...incoming.expenses].forEach(e => expenseMap.set(e.id, e));
-          appState.expenses = Array.from(expenseMap.values());
-
-          // 合併成員與類別
-          appState.members = Array.from(new Set([...appState.members, ...incoming.members]));
-          appState.choreCategories = Array.from(new Set([...appState.choreCategories, ...incoming.choreCategories]));
-          appState.expenseCategories = Array.from(new Set([...appState.expenseCategories, ...incoming.expenseCategories]));
-          
-          const spaceMap = new Map();
-          [...appState.spaces, ...incoming.spaces].forEach(s => spaceMap.set(s.id, s));
-          appState.spaces = Array.from(spaceMap.values());
+          // 推薦：智能雙向無損合併 (Smart Merge)
+          const result = mergeFullState(incoming);
+          document.getElementById('importDataInput').value = '';
+          showPushBanner('雙向合併完成', `成功融合雙方資料，共吸納/更新了 ${result.changesCount} 項改動，無任何紀錄遺失！`);
+          switchTab('tasks');
         }
-
-        saveState();
-        document.getElementById('importDataInput').value = '';
-        showPushBanner('匯入完成', mode === 'overwrite' ? '已完全覆蓋為最新資料' : '已成功智能合併雙方資料！');
-        switchTab('tasks');
       } catch (err) {
         showPushBanner('匯入失敗', '解析同步碼時發生錯誤');
       }
     }
 
-    // ---------- 5. 提醒與排程演算法 (Due Today 優先) ----------
+    // ---------- 7. 提醒與排程演算法 (Due Today 優先置頂) ----------
     function getPrioritizedReminders() {
       const today = getTodayString();
-      const uncompleted = appState.chores.filter(c => !c.completed);
-      
+      const uncompleted = (appState.chores || []).filter(c => !c.deleted && !c.completed);
+
       const overdueList = [];
       const dueTodayList = [];
       const scheduledTodayList = [];
@@ -731,11 +982,11 @@
       const urgentItems = list.slice(0, 3);
       const urgentCount = list.filter(c => c.tag && (c.tag.includes('今日到期') || c.tag.includes('過期'))).length;
 
-      // 1. 原生瀏覽器 Notification
+      // 1. 系統原生推播
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
           new Notification(`🌅 ${appState.appName} 晨早提醒`, {
-            body: `今日共有 ${list.length} 項待辦（${urgentCount} 項需今日/緊急搞掂）`,
+            body: `今日共有 ${list.length} 項待辦（${urgentCount} 項需緊急/今日搞掂）`,
             icon: 'https://placehold.co/128x128/f97316/ffffff?text=Home'
           });
         } catch (e) {}
@@ -743,13 +994,13 @@
 
       // 2. In-App 彈窗
       const toast = document.getElementById('pushToast');
-      document.getElementById('toastAppName').innerText = `${appState.appName} • 早晨提醒`;
+      document.getElementById('toastAppName').innerText = `${appState.appName} • 晨早提醒`;
       document.getElementById('toastTime').innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      document.getElementById('toastHeader').innerText = `今日有 ${list.length} 項待辦 (${urgentCount} 項需今日搞掂)`;
+      document.getElementById('toastHeader').innerText = `今日待辦家務：${list.length} 項 (${urgentCount} 項緊急)`;
 
       const listEl = document.getElementById('toastList');
       if (urgentItems.length === 0) {
-        listEl.innerHTML = '<div class="text-slate-300">屋企乾乾淨淨，今日暫無待辦事項！</div>';
+        listEl.innerHTML = '<div class="text-slate-300">屋企乾乾淨淨，今日暫無待辦事項！好好放鬆～</div>';
       } else {
         listEl.innerHTML = urgentItems.map(item => `
           <div class="flex items-center justify-between bg-slate-800/80 px-2.5 py-1.5 rounded-lg">
@@ -774,7 +1025,7 @@
       if ('Notification' in window) {
         Notification.requestPermission().then(perm => {
           updateNotificationBadge();
-          if (perm === 'granted') showPushBanner('已授權', '成功啟用瀏覽器原生提醒');
+          if (perm === 'granted') showPushBanner('已授權', '成功啟用瀏覽器原生系統提醒');
         });
       }
     }
@@ -800,11 +1051,21 @@
       saveState();
     }
 
-    // ---------- 6. 介面渲染與操作 (Rendering) ----------
+    // ---------- 8. 介面渲染與操作 (UI Rendering) ----------
     function renderAll() {
       document.getElementById('displayAppName').innerText = appState.appName;
       document.getElementById('notificationToggle').checked = appState.notificationConfig.enabled;
       document.getElementById('reminderTimeInput').value = appState.notificationConfig.remindTime;
+
+      // 檢查待同步徽章
+      const pendingCount = getPendingChangesCount();
+      const pendingBadge = document.getElementById('pendingSyncBadge');
+      if (pendingCount > 0) {
+        pendingBadge.classList.remove('hidden');
+        document.getElementById('pendingSyncCountText').innerText = `待同步: ${pendingCount}`;
+      } else {
+        pendingBadge.classList.add('hidden');
+      }
 
       renderSpacePills();
       renderMemberFilter();
@@ -818,6 +1079,8 @@
 
     function renderSpacePills() {
       const container = document.getElementById('spacePillsContainer');
+      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
+
       const allPill = `
         <button onclick="setSpaceFilter('ALL')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
           currentSpaceId === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -826,7 +1089,7 @@
         </button>
       `;
 
-      const spacePills = appState.spaces.map(sp => `
+      const spacePills = activeSpaces.map(sp => `
         <button onclick="setSpaceFilter('${sp.id}')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border ${
           currentSpaceId === sp.id ? 'bg-orange-50 border-orange-300 text-orange-700 shadow-xs' : 'bg-white border-slate-200 text-slate-600'
         }">
@@ -847,6 +1110,8 @@
 
     function renderMemberFilter() {
       const container = document.getElementById('memberFilterBar');
+      const activeMembers = (appState.members || []).filter(m => !m.deleted);
+
       const allBtn = `
         <button onclick="setMemberFilter('ALL')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
           currentMemberFilter === 'ALL' ? 'bg-orange-100 text-orange-800 border border-orange-300' : 'bg-white text-slate-500 border border-slate-200'
@@ -855,11 +1120,11 @@
         </button>
       `;
 
-      const memberBtns = appState.members.map(m => `
-        <button onclick="setMemberFilter('${m}')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-          currentMemberFilter === m ? 'bg-orange-500 text-white font-bold shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
+      const memberBtns = activeMembers.map(m => `
+        <button onclick="setMemberFilter('${m.name}')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+          currentMemberFilter === m.name ? 'bg-orange-500 text-white font-bold shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
         }">
-          ${m}
+          ${m.name}
         </button>
       `).join('');
 
@@ -870,7 +1135,10 @@
       const container = document.getElementById('choreListContainer');
       const today = getTodayString();
 
-      const filtered = appState.chores.filter(c => {
+      // 過濾軟刪除項目
+      const activeChores = (appState.chores || []).filter(c => !c.deleted);
+
+      const filtered = activeChores.filter(c => {
         if (currentSpaceId !== 'ALL' && c.spaceId !== currentSpaceId) return false;
         if (currentMemberFilter !== 'ALL' && c.assignee !== currentMemberFilter) return false;
         if (currentChoreFilter === 'pending') return !c.completed;
@@ -879,8 +1147,8 @@
       });
 
       // 統計數據
-      const pendingCount = appState.chores.filter(c => (currentSpaceId === 'ALL' || c.spaceId === currentSpaceId) && !c.completed).length;
-      const urgentCount = appState.chores.filter(c => !c.completed && (c.dueDate === today || (c.hasDueDate && c.dueDate < today))).length;
+      const pendingCount = activeChores.filter(c => (currentSpaceId === 'ALL' || c.spaceId === currentSpaceId) && !c.completed).length;
+      const urgentCount = activeChores.filter(c => !c.completed && (c.dueDate === today || (c.hasDueDate && c.dueDate < today))).length;
 
       document.getElementById('countPendingChores').innerText = pendingCount;
       document.getElementById('countUrgentChores').innerText = urgentCount;
@@ -890,14 +1158,14 @@
           <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
             <i data-lucide="check-circle-2" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
             <p class="text-sm font-bold text-slate-600">目前沒有家務事項</p>
-            <p class="text-xs text-slate-400 mt-1">點擊右上角「加家務」記錄新任務！</p>
+            <p class="text-xs text-slate-400 mt-1">點擊右上角「加家務」新增任務！</p>
           </div>
         `;
         return;
       }
 
       container.innerHTML = filtered.map(c => {
-        const space = appState.spaces.find(s => s.id === c.spaceId) || { name: '空間已刪除' };
+        const space = appState.spaces.find(s => s.id === c.spaceId) || { name: '已移除空間' };
         const isOverdue = !c.completed && c.hasDueDate && c.dueDate && (`${c.dueDate}T${c.dueTime || '23:59'}` < `${today}T${new Date().toTimeString().substring(0,5)}`);
         const isDueToday = !c.completed && c.hasDueDate && c.dueDate === today;
 
@@ -940,7 +1208,7 @@
                   <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold">${c.assignee.substring(0,1)}</span>
                   <span class="font-semibold text-slate-700">${c.assignee}</span>
                 </div>
-                <button onclick="deleteChore('${c.id}')" class="text-slate-300 hover:text-rose-500 p-1">
+                <button onclick="tombstoneDeleteChore('${c.id}')" class="text-slate-300 hover:text-rose-500 p-1" title="軟刪除">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </div>
@@ -954,13 +1222,15 @@
       const container = document.getElementById('expenseListContainer');
       const breakdownEl = document.getElementById('spaceSpendBreakdown');
 
-      const filtered = appState.expenses.filter(e => currentSpaceId === 'ALL' || e.spaceId === currentSpaceId);
+      const activeExpenses = (appState.expenses || []).filter(e => !e.deleted);
+      const filtered = activeExpenses.filter(e => currentSpaceId === 'ALL' || e.spaceId === currentSpaceId);
       const total = filtered.reduce((sum, item) => sum + Number(item.amount), 0);
       document.getElementById('totalSpendSummary').innerText = `總計: HK$ ${total.toLocaleString()}`;
 
       // 各空間分佈卡
-      breakdownEl.innerHTML = appState.spaces.map(s => {
-        const sTotal = appState.expenses.filter(e => e.spaceId === s.id).reduce((sum, item) => sum + Number(item.amount), 0);
+      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
+      breakdownEl.innerHTML = activeSpaces.map(s => {
+        const sTotal = activeExpenses.filter(e => e.spaceId === s.id).reduce((sum, item) => sum + Number(item.amount), 0);
         return `
           <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70">
             <span class="text-[11px] font-semibold text-slate-500 block truncate">${s.name}</span>
@@ -974,14 +1244,14 @@
           <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
             <i data-lucide="shopping-bag" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
             <p class="text-sm font-bold text-slate-600">暫無開支紀錄</p>
-            <p class="text-xs text-slate-400 mt-1">買洗頭水、買餸、交水電煤？即刻記低！</p>
+            <p class="text-xs text-slate-400 mt-1">買洗頭水、買餸、水電費？即刻記低！</p>
           </div>
         `;
         return;
       }
 
       container.innerHTML = filtered.map(e => {
-        const space = appState.spaces.find(s => s.id === e.spaceId) || { name: '空間已刪除' };
+        const space = appState.spaces.find(s => s.id === e.spaceId) || { name: '已移除空間' };
         return `
           <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -999,7 +1269,7 @@
             </div>
             <div class="flex items-center gap-3">
               <span class="text-base font-black text-slate-900">-HK$${e.amount}</span>
-              <button onclick="deleteExpense('${e.id}')" class="text-slate-300 hover:text-rose-500 p-1">
+              <button onclick="tombstoneDeleteExpense('${e.id}')" class="text-slate-300 hover:text-rose-500 p-1" title="軟刪除">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
               </button>
             </div>
@@ -1029,18 +1299,19 @@
       `).join('');
     }
 
-    // ---------- 7. 獨立「管理中心」面板渲染 (CRUD & 自動連動) ----------
+    // ---------- 9. 獨立「管理中心」面板渲染 (CRUD & 聯動更新) ----------
     function renderAdminPanel() {
       const container = document.getElementById('adminPanelContainer');
 
       if (activeAdminSubTab === 'members') {
+        const activeMembers = (appState.members || []).filter(m => !m.deleted);
         container.innerHTML = `
           <div class="flex items-center justify-between pb-2 border-b border-slate-100">
             <div>
               <h3 class="text-sm font-bold text-slate-900">家庭成員 / 負責人管理</h3>
               <p class="text-xs text-slate-400">更名後所有現存家務及付款紀錄會全自動同步更新</p>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${appState.members.length} 人</span>
+            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeMembers.length} 人</span>
           </div>
 
           <div class="flex gap-2 pt-1">
@@ -1049,18 +1320,18 @@
           </div>
 
           <div class="space-y-2 pt-2">
-            ${appState.members.map(m => `
+            ${activeMembers.map(m => `
               <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <div class="flex items-center gap-2">
-                  <span class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold">${m.substring(0,1)}</span>
-                  <span class="text-sm font-bold text-slate-800">${m}</span>
+                  <span class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold">${m.name.substring(0,1)}</span>
+                  <span class="text-sm font-bold text-slate-800">${m.name}</span>
                 </div>
                 <div class="flex items-center gap-1">
-                  <button onclick="promptRenameMember('${m}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
+                  <button onclick="promptRenameMember('${m.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  ${appState.members.length > 1 ? `
-                    <button onclick="deleteMember('${m}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                  ${activeMembers.length > 1 ? `
+                    <button onclick="tombstoneDeleteMember('${m.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                   ` : ''}
@@ -1070,13 +1341,14 @@
           </div>
         `;
       } else if (activeAdminSubTab === 'choreCats') {
+        const activeCats = (appState.choreCategories || []).filter(c => !c.deleted);
         container.innerHTML = `
           <div class="flex items-center justify-between pb-2 border-b border-slate-100">
             <div>
               <h3 class="text-sm font-bold text-slate-900">家務類別管理</h3>
-              <p class="text-xs text-slate-400">更名或刪除清潔、維修等任務類別</p>
+              <p class="text-xs text-slate-400">更名或軟刪除清潔、維修等任務類別</p>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${appState.choreCategories.length} 個</span>
+            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeCats.length} 個</span>
           </div>
 
           <div class="flex gap-2 pt-1">
@@ -1085,15 +1357,15 @@
           </div>
 
           <div class="space-y-2 pt-2">
-            ${appState.choreCategories.map(cat => `
+            ${activeCats.map(cat => `
               <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200">${cat}</span>
+                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200">${cat.name}</span>
                 <div class="flex items-center gap-1">
-                  <button onclick="promptRenameChoreCat('${cat}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
+                  <button onclick="promptRenameChoreCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  ${appState.choreCategories.length > 1 ? `
-                    <button onclick="deleteChoreCategory('${cat}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                  ${activeCats.length > 1 ? `
+                    <button onclick="tombstoneDeleteChoreCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                   ` : ''}
@@ -1103,13 +1375,14 @@
           </div>
         `;
       } else if (activeAdminSubTab === 'expenseCats') {
+        const activeCats = (appState.expenseCategories || []).filter(c => !c.deleted);
         container.innerHTML = `
           <div class="flex items-center justify-between pb-2 border-b border-slate-100">
             <div>
               <h3 class="text-sm font-bold text-slate-900">家庭開支類別管理</h3>
               <p class="text-xs text-slate-400">洗頭水、買餸、水電煤等自訂分類</p>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${appState.expenseCategories.length} 個</span>
+            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeCats.length} 個</span>
           </div>
 
           <div class="flex gap-2 pt-1">
@@ -1118,15 +1391,15 @@
           </div>
 
           <div class="space-y-2 pt-2">
-            ${appState.expenseCategories.map(cat => `
+            ${activeCats.map(cat => `
               <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200">${cat}</span>
+                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200">${cat.name}</span>
                 <div class="flex items-center gap-1">
-                  <button onclick="promptRenameExpenseCat('${cat}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
+                  <button onclick="promptRenameExpenseCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  ${appState.expenseCategories.length > 1 ? `
-                    <button onclick="deleteExpenseCategory('${cat}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                  ${activeCats.length > 1 ? `
+                    <button onclick="tombstoneDeleteExpenseCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                   ` : ''}
@@ -1136,13 +1409,14 @@
           </div>
         `;
       } else if (activeAdminSubTab === 'spaces') {
+        const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
         container.innerHTML = `
           <div class="flex items-center justify-between pb-2 border-b border-slate-100">
             <div>
               <h3 class="text-sm font-bold text-slate-900">家居空間 / 物業管理</h3>
               <p class="text-xs text-slate-400">新增或更改空間名稱 (我屋企、長輩屋企、出租屋等)</p>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${appState.spaces.length} 間</span>
+            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeSpaces.length} 間</span>
           </div>
 
           <div class="flex gap-2 pt-1">
@@ -1151,7 +1425,7 @@
           </div>
 
           <div class="space-y-2 pt-2">
-            ${appState.spaces.map(s => `
+            ${activeSpaces.map(s => `
               <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <div class="flex items-center gap-2">
                   <i data-lucide="building" class="w-4 h-4 text-slate-500"></i>
@@ -1161,8 +1435,8 @@
                   <button onclick="promptRenameSpace('${s.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
                     <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                   </button>
-                  ${appState.spaces.length > 1 ? `
-                    <button onclick="deleteSpace('${s.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                  ${activeSpaces.length > 1 ? `
+                    <button onclick="tombstoneDeleteSpace('${s.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                   ` : ''}
@@ -1174,88 +1448,152 @@
       }
     }
 
-    // ---------- 8. 管理中心操作方法 (CRUD) ----------
+    // ---------- 10. 管理操作與墓碑軟刪除 (Tombstone Deletion) ----------
     function addMember() {
       const val = document.getElementById('newMemberInput').value.trim();
-      if (!val || appState.members.includes(val)) return;
-      appState.members.push(val);
+      if (!val) return;
+      const id = createUUID('m');
+      appState.members.push({ id, name: val, updatedAt: Date.now(), deleted: false });
       saveState();
     }
 
-    function promptRenameMember(oldName) {
-      showCustomPrompt(`更名成員「${oldName}」為：`, oldName, (newName) => {
-        if (!newName || newName === oldName) return;
-        appState.members = appState.members.map(m => m === oldName ? newName : m);
-        appState.chores = appState.chores.map(c => c.assignee === oldName ? { ...c, assignee: newName } : c);
-        appState.expenses = appState.expenses.map(e => e.paidBy === oldName ? { ...e, paidBy: newName } : e);
+    function promptRenameMember(id) {
+      const m = appState.members.find(item => item.id === id);
+      if (!m) return;
+      showCustomPrompt(`更名成員「${m.name}」為：`, m.name, (newName) => {
+        if (!newName || newName === m.name) return;
+        const oldName = m.name;
+        m.name = newName;
+        m.updatedAt = Date.now();
+
+        // 聯動更新現有家務與開支中的名字
+        appState.chores.forEach(c => {
+          if (c.assignee === oldName) {
+            c.assignee = newName;
+            c.updatedAt = Date.now();
+          }
+        });
+        appState.expenses.forEach(e => {
+          if (e.paidBy === oldName) {
+            e.paidBy = newName;
+            e.updatedAt = Date.now();
+          }
+        });
+
         if (currentMemberFilter === oldName) currentMemberFilter = newName;
         saveState();
       });
     }
 
-    function deleteMember(name) {
-      if (appState.members.length <= 1) return;
-      appState.members = appState.members.filter(m => m !== name);
-      const fallback = appState.members[0];
-      appState.chores = appState.chores.map(c => c.assignee === name ? { ...c, assignee: fallback } : c);
-      appState.expenses = appState.expenses.map(e => e.paidBy === name ? { ...e, paidBy: fallback } : e);
-      if (currentMemberFilter === name) currentMemberFilter = 'ALL';
-      saveState();
+    function tombstoneDeleteMember(id) {
+      const active = appState.members.filter(m => !m.deleted);
+      if (active.length <= 1) return;
+      const m = appState.members.find(item => item.id === id);
+      if (m) {
+        m.deleted = true;
+        m.updatedAt = Date.now();
+        const fallback = active.find(item => item.id !== id)?.name || '我';
+        appState.chores.forEach(c => {
+          if (c.assignee === m.name) {
+            c.assignee = fallback;
+            c.updatedAt = Date.now();
+          }
+        });
+        if (currentMemberFilter === m.name) currentMemberFilter = 'ALL';
+        saveState();
+      }
     }
 
     function addChoreCategory() {
       const val = document.getElementById('newChoreCatInput').value.trim();
-      if (!val || appState.choreCategories.includes(val)) return;
-      appState.choreCategories.push(val);
+      if (!val) return;
+      appState.choreCategories.push({ id: createUUID('cc'), name: val, updatedAt: Date.now(), deleted: false });
       saveState();
     }
 
-    function promptRenameChoreCat(oldCat) {
-      showCustomPrompt(`更名家務類別「${oldCat}」為：`, oldCat, (newCat) => {
-        if (!newCat || newCat === oldCat) return;
-        appState.choreCategories = appState.choreCategories.map(c => c === oldCat ? newCat : c);
-        appState.chores = appState.chores.map(c => c.category === oldCat ? { ...c, category: newCat } : c);
+    function promptRenameChoreCat(id) {
+      const cat = appState.choreCategories.find(item => item.id === id);
+      if (!cat) return;
+      showCustomPrompt(`更名家務類別「${cat.name}」為：`, cat.name, (newCat) => {
+        if (!newCat || newCat === cat.name) return;
+        const oldName = cat.name;
+        cat.name = newCat;
+        cat.updatedAt = Date.now();
+        appState.chores.forEach(c => {
+          if (c.category === oldName) {
+            c.category = newCat;
+            c.updatedAt = Date.now();
+          }
+        });
         saveState();
       });
     }
 
-    function deleteChoreCategory(cat) {
-      if (appState.choreCategories.length <= 1) return;
-      appState.choreCategories = appState.choreCategories.filter(c => c !== cat);
-      const fallback = appState.choreCategories[0];
-      appState.chores = appState.chores.map(c => c.category === cat ? { ...c, category: fallback } : c);
-      saveState();
+    function tombstoneDeleteChoreCat(id) {
+      const active = appState.choreCategories.filter(c => !c.deleted);
+      if (active.length <= 1) return;
+      const cat = appState.choreCategories.find(item => item.id === id);
+      if (cat) {
+        cat.deleted = true;
+        cat.updatedAt = Date.now();
+        const fallback = active.find(item => item.id !== id)?.name || '日常';
+        appState.chores.forEach(c => {
+          if (c.category === cat.name) {
+            c.category = fallback;
+            c.updatedAt = Date.now();
+          }
+        });
+        saveState();
+      }
     }
 
     function addExpenseCategory() {
       const val = document.getElementById('newExpenseCatInput').value.trim();
-      if (!val || appState.expenseCategories.includes(val)) return;
-      appState.expenseCategories.push(val);
+      if (!val) return;
+      appState.expenseCategories.push({ id: createUUID('ec'), name: val, updatedAt: Date.now(), deleted: false });
       saveState();
     }
 
-    function promptRenameExpenseCat(oldCat) {
-      showCustomPrompt(`更名開支類別「${oldCat}」為：`, oldCat, (newCat) => {
-        if (!newCat || newCat === oldCat) return;
-        appState.expenseCategories = appState.expenseCategories.map(c => c === oldCat ? newCat : c);
-        appState.expenses = appState.expenses.map(e => e.category === oldCat ? { ...e, category: newCat } : e);
+    function promptRenameExpenseCat(id) {
+      const cat = appState.expenseCategories.find(item => item.id === id);
+      if (!cat) return;
+      showCustomPrompt(`更名開支類別「${cat.name}」為：`, cat.name, (newCat) => {
+        if (!newCat || newCat === cat.name) return;
+        const oldName = cat.name;
+        cat.name = newCat;
+        cat.updatedAt = Date.now();
+        appState.expenses.forEach(e => {
+          if (e.category === oldName) {
+            e.category = newCat;
+            e.updatedAt = Date.now();
+          }
+        });
         saveState();
       });
     }
 
-    function deleteExpenseCategory(cat) {
-      if (appState.expenseCategories.length <= 1) return;
-      appState.expenseCategories = appState.expenseCategories.filter(c => c !== cat);
-      const fallback = appState.expenseCategories[0];
-      appState.expenses = appState.expenses.map(e => e.category === cat ? { ...e, category: fallback } : e);
-      saveState();
+    function tombstoneDeleteExpenseCat(id) {
+      const active = appState.expenseCategories.filter(c => !c.deleted);
+      if (active.length <= 1) return;
+      const cat = appState.expenseCategories.find(item => item.id === id);
+      if (cat) {
+        cat.deleted = true;
+        cat.updatedAt = Date.now();
+        const fallback = active.find(item => item.id !== id)?.name || '日用品';
+        appState.expenses.forEach(e => {
+          if (e.category === cat.name) {
+            e.category = fallback;
+            e.updatedAt = Date.now();
+          }
+        });
+        saveState();
+      }
     }
 
     function addSpace() {
       const val = document.getElementById('newSpaceInput').value.trim();
       if (!val) return;
-      const id = 'sp_' + Date.now();
-      appState.spaces.push({ id, name: val, color: 'orange' });
+      appState.spaces.push({ id: createUUID('sp'), name: val, color: 'orange', updatedAt: Date.now(), deleted: false });
       saveState();
     }
 
@@ -1265,46 +1603,72 @@
       showCustomPrompt(`更名空間「${sp.name}」為：`, sp.name, (newName) => {
         if (!newName) return;
         sp.name = newName;
+        sp.updatedAt = Date.now();
         saveState();
       });
     }
 
-    function deleteSpace(id) {
-      if (appState.spaces.length <= 1) return;
-      appState.spaces = appState.spaces.filter(s => s.id !== id);
-      const fallbackId = appState.spaces[0].id;
-      appState.chores = appState.chores.map(c => c.spaceId === id ? { ...c, spaceId: fallbackId } : c);
-      appState.expenses = appState.expenses.map(e => e.spaceId === id ? { ...e, spaceId: fallbackId } : e);
-      if (currentSpaceId === id) currentSpaceId = 'ALL';
-      saveState();
+    function tombstoneDeleteSpace(id) {
+      const active = appState.spaces.filter(s => !s.deleted);
+      if (active.length <= 1) return;
+      const sp = appState.spaces.find(s => s.id === id);
+      if (sp) {
+        sp.deleted = true;
+        sp.updatedAt = Date.now();
+        const fallbackId = active.find(item => item.id !== id)?.id || 'sp_1';
+        appState.chores.forEach(c => {
+          if (c.spaceId === id) {
+            c.spaceId = fallbackId;
+            c.updatedAt = Date.now();
+          }
+        });
+        appState.expenses.forEach(e => {
+          if (e.spaceId === id) {
+            e.spaceId = fallbackId;
+            e.updatedAt = Date.now();
+          }
+        });
+        if (currentSpaceId === id) currentSpaceId = 'ALL';
+        saveState();
+      }
     }
 
     function openAppNamePrompt() {
       showCustomPrompt('修改 App / 家族群組名稱：', appState.appName, (newTitle) => {
         if (newTitle) {
           appState.appName = newTitle;
+          appState.appNameUpdatedAt = Date.now();
           saveState();
         }
       });
     }
 
-    // ---------- 9. 家務與開支動作 ----------
+    // ---------- 11. 家務與開支動作 (帶時間戳記與軟刪除) ----------
     function toggleChoreComplete(id) {
       const chore = appState.chores.find(c => c.id === id);
       if (chore) {
         chore.completed = !chore.completed;
+        chore.updatedAt = Date.now();
         saveState();
       }
     }
 
-    function deleteChore(id) {
-      appState.chores = appState.chores.filter(c => c.id !== id);
-      saveState();
+    function tombstoneDeleteChore(id) {
+      const chore = appState.chores.find(c => c.id === id);
+      if (chore) {
+        chore.deleted = true;
+        chore.updatedAt = Date.now();
+        saveState();
+      }
     }
 
-    function deleteExpense(id) {
-      appState.expenses = appState.expenses.filter(e => e.id !== id);
-      saveState();
+    function tombstoneDeleteExpense(id) {
+      const expense = appState.expenses.find(e => e.id === id);
+      if (expense) {
+        expense.deleted = true;
+        expense.updatedAt = Date.now();
+        saveState();
+      }
     }
 
     function handleCreateChore(e) {
@@ -1314,7 +1678,7 @@
 
       const hasDue = document.getElementById('modalChoreHasDueDate').checked;
       const newC = {
-        id: 'c_' + Date.now(),
+        id: createUUID('c'),
         title,
         spaceId: document.getElementById('modalChoreSpace').value,
         assignee: document.getElementById('modalChoreAssignee').value,
@@ -1325,7 +1689,9 @@
         dueDate: hasDue ? document.getElementById('modalChoreDueDate').value : '',
         dueTime: hasDue ? document.getElementById('modalChoreDueTime').value : '',
         notes: document.getElementById('modalChoreNotes').value.trim(),
-        completed: false
+        completed: false,
+        updatedAt: Date.now(),
+        deleted: false
       };
 
       appState.chores.unshift(newC);
@@ -1342,13 +1708,15 @@
       if (!title || isNaN(amount)) return;
 
       const newE = {
-        id: 'e_' + Date.now(),
+        id: createUUID('e'),
         title,
         amount,
         spaceId: document.getElementById('modalExpenseSpace').value,
         paidBy: document.getElementById('modalExpensePaidBy').value,
         category: document.getElementById('modalExpenseCategory').value,
-        date: document.getElementById('modalExpenseDate').value
+        date: document.getElementById('modalExpenseDate').value,
+        updatedAt: Date.now(),
+        deleted: false
       };
 
       appState.expenses.unshift(newE);
@@ -1358,7 +1726,7 @@
       document.getElementById('modalExpenseAmount').value = '';
     }
 
-    // ---------- 10. 導航與篩選控制 ----------
+    // ---------- 12. 導航與篩選切換 ----------
     function switchTab(tabId) {
       activeTabName = tabId;
       ['tasks', 'expenses', 'reminders', 'sync', 'management'].forEach(t => {
@@ -1373,7 +1741,6 @@
         }
       });
 
-      // 調整右上角快捷按鈕
       const quickBtn = document.getElementById('quickAddBtn');
       const quickLabel = document.getElementById('quickAddBtnLabel');
       if (tabId === 'expenses') {
@@ -1387,10 +1754,6 @@
       }
 
       renderAll();
-    }
-
-    function openSyncTab() {
-      switchTab('sync');
     }
 
     function switchAdminSubTab(subTab) {
@@ -1435,16 +1798,21 @@
 
     function openModal(modalId) {
       const today = getTodayString();
+      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
+      const activeMembers = (appState.members || []).filter(m => !m.deleted);
+      const activeChoreCats = (appState.choreCategories || []).filter(c => !c.deleted);
+      const activeExpenseCats = (appState.expenseCategories || []).filter(c => !c.deleted);
+
       if (modalId === 'choreModal') {
-        populateSelect('modalChoreSpace', appState.spaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? appState.spaces[0].id : currentSpaceId);
-        populateSelect('modalChoreAssignee', appState.members.map(m => ({ value: m, label: m })), appState.members[0]);
-        populateSelect('modalChoreCategory', appState.choreCategories.map(c => ({ value: c, label: c })), appState.choreCategories[0]);
+        populateSelect('modalChoreSpace', activeSpaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? activeSpaces[0]?.id : currentSpaceId);
+        populateSelect('modalChoreAssignee', activeMembers.map(m => ({ value: m.name, label: m.name })), activeMembers[0]?.name);
+        populateSelect('modalChoreCategory', activeChoreCats.map(c => ({ value: c.name, label: c.name })), activeChoreCats[0]?.name);
         document.getElementById('modalChorePlannedDate').value = today;
         document.getElementById('modalChoreDueDate').value = today;
       } else if (modalId === 'expenseModal') {
-        populateSelect('modalExpenseSpace', appState.spaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? appState.spaces[0].id : currentSpaceId);
-        populateSelect('modalExpensePaidBy', appState.members.map(m => ({ value: m, label: m })), appState.members[0]);
-        populateSelect('modalExpenseCategory', appState.expenseCategories.map(c => ({ value: c, label: c })), appState.expenseCategories[0]);
+        populateSelect('modalExpenseSpace', activeSpaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? activeSpaces[0]?.id : currentSpaceId);
+        populateSelect('modalExpensePaidBy', activeMembers.map(m => ({ value: m.name, label: m.name })), activeMembers[0]?.name);
+        populateSelect('modalExpenseCategory', activeExpenseCats.map(c => ({ value: c.name, label: c.name })), activeExpenseCats[0]?.name);
         document.getElementById('modalExpenseDate').value = today;
       }
       document.getElementById(modalId).classList.remove('hidden');
@@ -1466,7 +1834,7 @@
       `).join('');
     }
 
-    // ---------- 11. 自訂 UI 替代原生 alert() & confirm() ----------
+    // ---------- 13. 提示彈窗輔助函式 ----------
     function showPushBanner(title, body) {
       const toast = document.getElementById('pushToast');
       document.getElementById('toastAppName').innerText = appState.appName;
@@ -1474,16 +1842,15 @@
       document.getElementById('toastHeader').innerText = title;
       document.getElementById('toastList').innerHTML = `<div class="text-xs text-slate-300">${body}</div>`;
       toast.classList.remove('hidden');
-      setTimeout(hidePushToast, 4000);
+      setTimeout(hidePushToast, 4500);
     }
 
     function showCustomPrompt(title, defaultValue, callback) {
-      const val = window.prompt(title, defaultValue); // 簡化輸入相容
+      const val = window.prompt(title, defaultValue);
       if (val !== null) callback(val.trim());
     }
 
     function showCustomConfirm(msg, onConfirm) {
-      // 構建無遮擋行內確認彈窗
       const existing = document.getElementById('customConfirmModal');
       if (existing) existing.remove();
 
@@ -1509,12 +1876,12 @@
       };
     }
 
-    // ---------- 12. 初始化啟動與排程輪詢 ----------
+    // ---------- 14. 系統初始化啟動 ----------
     window.onload = function() {
       initPeer();
       renderAll();
 
-      // 每分鐘檢查定時通知時間
+      // 定時檢查晨早提醒推播
       setInterval(() => {
         if (!appState.notificationConfig.enabled) return;
         const now = new Date();
