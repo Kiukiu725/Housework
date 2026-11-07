@@ -67,7 +67,7 @@
             <div class="flex items-center gap-1.5 mt-0.5">
               <button onclick="switchTab('sync')" id="syncStatusBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <span id="syncStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span id="syncStatusLabel">本機儲存 (0 待同步)</span>
+                <span id="syncStatusLabel">本機模式 (點此入房同步)</span>
               </button>
             </div>
           </div>
@@ -220,37 +220,56 @@
       <div id="adminPanelContainer" class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs"></div>
     </section>
 
-    <!-- TAB 5: P2P 同步 -->
+    <!-- TAB 5: Firebase 雲端房間同步 + 離線同步 -->
     <section id="viewSync" class="space-y-4 hidden">
       <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-            <i data-lucide="radio" class="w-5 h-5"></i>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+              <i data-lucide="cloud" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-extrabold text-slate-900">Firebase 雲端房間即時同步</h3>
+              <p class="text-xs text-slate-400">輸入同一個房號，全屋企人 24 小時自動雙向無損同步</p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-sm font-extrabold text-slate-900">零伺服器 P2P 雙向同步</h3>
-            <p class="text-xs text-slate-400">雙向無損合併，離線隨便入，連線不覆蓋</p>
-          </div>
-        </div>
-
-        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">我的房間同步碼</span>
-            <span id="myPeerIdDisplay" class="text-xs font-mono font-extrabold text-indigo-600 tracking-wider">產生中...</span>
-          </div>
-          <button onclick="createOrRefreshP2P()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-xs">
-            重新產生房間碼
+          <button onclick="promptFirebaseUrlSetup()" class="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[11px] shrink-0">
+            設定網址
           </button>
         </div>
 
+        <!-- 雲端連線狀態卡片 -->
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">目前雲端房間號</span>
+            <span id="myPeerIdDisplay" class="text-xs font-mono font-extrabold text-emerald-600 tracking-wider">未入房 (單機模式)</span>
+          </div>
+          <div id="firebaseUrlStatusBox" class="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200/60">
+            <span id="firebaseUrlStatusText">檢查緊 Firebase 網址設定...</span>
+          </div>
+        </div>
+
+        <!-- 輸入房號開房 / 入房 -->
         <div class="space-y-2">
-          <label class="text-xs font-bold text-slate-700 block">加入家人的同步碼 (雙向合併)</label>
+          <label class="text-xs font-bold text-slate-700 block">開新房間 / 加入屋企人房間</label>
           <div class="flex gap-2">
-            <input type="text" id="targetPeerIdInput" placeholder="輸入6位數房間碼" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold uppercase focus:outline-none">
-            <button onclick="connectToPeer()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs">
-              連線合併
+            <input type="text" id="targetPeerIdInput" placeholder="輸入房號 (例如: HOME88)" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <button onclick="connectToPeer()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs shrink-0">
+              連入房間
             </button>
           </div>
+        </div>
+
+        <!-- 房間快捷操作掣 -->
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="shareRoomLink()" class="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors">
+            <i data-lucide="link" class="w-3.5 h-3.5"></i>
+            <span>複製房間邀請 Link</span>
+          </button>
+          <button onclick="leaveCloudRoom()" class="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>離開房間 (轉單機)</span>
+          </button>
         </div>
 
         <!-- 離線雙向合併模擬器 -->
@@ -262,11 +281,11 @@
           </button>
         </div>
 
-        <!-- 離線同步碼分享 (WhatsApp) -->
+        <!-- 離線同步碼分享 (WhatsApp 後備方案) -->
         <div class="pt-2 border-t border-slate-100 flex gap-2">
           <button onclick="copySyncCodeWhatsApp()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
-            <span>複製同步碼發到 WhatsApp</span>
+            <span>複製離線碼發 WhatsApp</span>
           </button>
           <button onclick="importSyncCodePrompt()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs">
             貼上匯入
@@ -297,8 +316,8 @@
         <span class="text-[10px]">管理中心</span>
       </button>
       <button onclick="switchTab('sync')" id="tabBtn_sync" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all">
-        <i data-lucide="radio" class="w-5 h-5"></i>
-        <span class="text-[10px]">P2P同步</span>
+        <i data-lucide="cloud" class="w-5 h-5"></i>
+        <span class="text-[10px]">雲端同步</span>
       </button>
     </div>
   </nav>
@@ -361,7 +380,7 @@
     <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100">
         <h3 class="text-base font-extrabold text-slate-900">記錄家庭開支</h3>
-        <button onclick=" closeExpenseModal()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-5 h-5"></i></button>
+        <button onclick="closeExpenseModal()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
       <form onsubmit="handleSaveExpense(event)" class="space-y-3.5 mt-4">
         <div>
@@ -395,7 +414,7 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: 通用輸入與確認對話框 (取代 prompt/confirm/alert) ================= -->
+  <!-- ================= MODAL: 通用輸入與確認對話框 ================= -->
   <div id="customDialogModal" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-slate-100 space-y-4">
       <div class="flex items-center justify-between">
@@ -415,7 +434,6 @@
 
   <!-- ================= 核心 JavaScript 邏輯 ================= -->
   <script>
-    // 預設資料集 (CRDT LWW 格式)
     const STORAGE_KEY = 'HOMESYNC_HK_V4';
     const nowTime = Date.now();
     const todayStr = new Date().toISOString().split('T')[0];
@@ -517,7 +535,6 @@
       ]
     };
 
-    // 自訂無阻塞對話框 (取代 alert / prompt / confirm)
     function openCustomPrompt(title, defaultValue, callback) {
       document.getElementById('customDialogTitle').innerText = title;
       document.getElementById('customDialogMessage').classList.add('hidden');
@@ -555,7 +572,6 @@
       document.getElementById('customDialogModal').classList.add('hidden');
     }
 
-    // 載入 State
     let appState = (() => {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -564,14 +580,17 @@
       return defaultState;
     })();
 
-    function saveState() {
+    // 當 isFromCloud 為 true 時，只存本機，唔會無限 Loop 再推返上雲端
+    function saveState(isFromCloud = false) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
         renderAll();
+        if (!isFromCloud && typeof window.pushStateToFirebase === 'function') {
+          window.pushStateToFirebase();
+        }
       } catch (e) { console.error(e); }
     }
 
-    // 播放提示音 (Web Audio API)
     function playChimeSound() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -580,8 +599,8 @@
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
         gain.gain.setValueAtTime(0.2, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
         osc.start();
@@ -589,7 +608,6 @@
       } catch (e) {}
     }
 
-    // 彈出頂部 Push Notification 橫幅
     let bannerTimer = null;
     function showPushBanner(title, body, tag = '即時通知') {
       const banner = document.getElementById('pushBanner');
@@ -600,7 +618,6 @@
       banner.classList.remove('hidden');
       playChimeSound();
 
-      // 原生通知支援
       if ('Notification' in window && Notification.permission === 'granted') {
         try { new Notification(title, { body: body }); } catch (e) {}
       }
@@ -624,12 +641,20 @@
       if (appState.activityLogs.length > 50) appState.activityLogs.pop();
     }
 
-    // 廣播動作給房間所有人
+    // 廣播動作給房間所有人 (同時支援 Firebase 雲端推播 + 本機分頁廣播)
     function broadcastAction(actionType, detail, notificationMsg) {
       addActivityLog(notificationMsg.fullText, actionType);
       showPushBanner(notificationMsg.title, notificationMsg.body, '家人動態廣播');
       
-      // 透過沙盒安全的 BroadcastChannel 進行跨分頁/點對點即時廣播
+      // 記錄最後一個廣播事件，等屋企人部電話一收到雲端更新就彈 Banner
+      appState.lastBroadcast = {
+        id: 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        actor: appState.currentUser,
+        title: notificationMsg.title,
+        body: notificationMsg.body,
+        timestamp: Date.now()
+      };
+
       if (syncChannel) {
         try {
           syncChannel.postMessage({
@@ -644,7 +669,6 @@
       saveState();
     }
 
-    // 模擬家人加 Item
     function simulateFamilyAddItem() {
       const familyNames = appState.members.filter(m => !m.deleted && m.name !== appState.currentUser).map(m => m.name);
       const actor = familyNames.length ? familyNames[Math.floor(Math.random() * familyNames.length)] : '媽咪';
@@ -696,7 +720,6 @@
       }
     }
 
-    // 觸發早晨提醒 (Due 優先置頂)
     function triggerMorningReminder(force = false) {
       const activeChores = appState.tasks.filter(t => !t.deleted && !t.completed);
       const urgent = activeChores.filter(t => t.hasDueDate && t.dueDate <= todayStr);
@@ -712,16 +735,14 @@
       showPushBanner(title, body, '早晨排程提醒');
     }
 
-    // CRDT 雙向無損合併演算法
     function mergeCRDTLists(localList, remoteList) {
       const map = new Map();
-      localList.forEach(item => map.set(item.id, item));
-      remoteList.forEach(remoteItem => {
+      (localList || []).forEach(item => map.set(item.id, item));
+      (remoteList || []).forEach(remoteItem => {
         const localItem = map.get(remoteItem.id);
         if (!localItem) {
           map.set(remoteItem.id, remoteItem);
         } else {
-          // LWW: 比對最後修改時間
           if ((remoteItem.updatedAt || 0) > (localItem.updatedAt || 0)) {
             map.set(remoteItem.id, remoteItem);
           }
@@ -730,7 +751,6 @@
       return Array.from(map.values());
     }
 
-    // 單機離線合併模擬器
     function simulateOfflineMerge() {
       const simulatedRemoteTasks = [
         {
@@ -768,11 +788,9 @@
       addActivityLog('完成單機雙向無損合併模擬：成功融合雙方離線紀錄');
     }
 
-    // ================= 介面渲染與事件 =================
     function renderAll() {
       document.getElementById('headerAppName').innerText = appState.appName;
       
-      // 渲染用戶身份選單
       const userSelect = document.getElementById('currentUserSelect');
       const activeMembers = appState.members.filter(m => !m.deleted);
       userSelect.innerHTML = activeMembers.map(m => `
@@ -810,7 +828,6 @@
       const activeHouseholds = appState.households.filter(h => !h.deleted);
       const activeMembers = appState.members.filter(m => !m.deleted);
       
-      // 成員橫向篩選
       const memberFilterContainer = document.getElementById('memberQuickFilterBar');
       let memberHtml = `
         <button onclick="setMemberFilter('ALL')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${
@@ -826,7 +843,6 @@
       });
       memberFilterContainer.innerHTML = memberHtml;
 
-      // 過濾任務
       const filtered = appState.tasks.filter(t => {
         if (t.deleted) return false;
         if (appState.currentSpaceId !== 'ALL' && t.householdId !== appState.currentSpaceId) return false;
@@ -836,7 +852,6 @@
         return true;
       });
 
-      // 統計數據
       const uncompletedAll = appState.tasks.filter(t => !t.deleted && !t.completed);
       document.getElementById('statPendingCount').innerText = uncompletedAll.length;
       const urgentCount = uncompletedAll.filter(t => t.hasDueDate && t.dueDate <= todayStr).length;
@@ -891,7 +906,6 @@
       document.getElementById('expenseTotalDisplay').innerText = `HK$ ${total.toLocaleString()}`;
       document.getElementById('expenseCountLabel').innerText = `共 ${filtered.length} 筆`;
 
-      // 屋企開支條形圖
       const barsContainer = document.getElementById('expenseBarsContainer');
       barsContainer.innerHTML = activeHouseholds.map(h => {
         const hhSum = appState.expenses.filter(e => !e.deleted && e.householdId === h.id).reduce((s, i) => s + i.amount, 0);
@@ -945,7 +959,6 @@
       `).join('');
     }
 
-    // 管理中心分頁渲染
     function renderAdminPanel() {
       const container = document.getElementById('adminPanelContainer');
       const sub = appState.adminSubTab;
@@ -1024,7 +1037,6 @@
       lucide.createIcons();
     }
 
-    // ================= 操作函數 =================
     function toggleChoreComplete(id) {
       const chore = appState.tasks.find(t => t.id === id);
       if (!chore) return;
@@ -1085,6 +1097,8 @@
         deleted: false
       };
       appState.tasks.unshift(newChore);
+      document.getElementById('choreTitleInput').value = '';
+      document.getElementById('choreNotesInput').value = '';
       closeChoreModal();
       broadcastAction('task_add', newChore, {
         title: `🔔 ${appState.currentUser} 新增咗家務！`,
@@ -1110,6 +1124,8 @@
         deleted: false
       };
       appState.expenses.unshift(newExp);
+      document.getElementById('expTitleInput').value = '';
+      document.getElementById('expAmountInput').value = '';
       closeExpenseModal();
       broadcastAction('expense_add', newExp, {
         title: `💰 ${appState.currentUser} 記低咗新開支！`,
@@ -1118,7 +1134,6 @@
       });
     }
 
-    // Modal 控制
     function openChoreModal() {
       document.getElementById('choreHouseholdSelect').innerHTML = appState.households.filter(h => !h.deleted).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
       document.getElementById('choreAssigneeSelect').innerHTML = appState.members.filter(m => !m.deleted).map(m => `<option value="${m.name}">${m.name}</option>`).join('');
@@ -1141,7 +1156,6 @@
       document.getElementById('dueInputsRow').classList.toggle('hidden', !show);
     }
 
-    // 分頁切換
     function switchTab(tab) {
       appState.activeTab = tab;
       ['tasks', 'expenses', 'notifications', 'management', 'sync'].forEach(t => {
@@ -1178,7 +1192,7 @@
 
     function handleCurrentUserChange(val) {
       appState.currentUser = val;
-      saveState();
+      saveState(true);
     }
 
     function openAppNameModal() {
@@ -1190,7 +1204,6 @@
       });
     }
 
-    // 成員增刪改 (全自動連動更名)
     function addMemberAction() {
       const name = document.getElementById('newMemberNameInput').value.trim();
       if (!name) return;
@@ -1203,7 +1216,6 @@
           const trimmed = newName.trim();
           const m = appState.members.find(x => x.id === id);
           if (m) { m.name = trimmed; m.updatedAt = Date.now(); }
-          // 級聯更新家務與開支
           appState.tasks.forEach(t => { if (t.assignee === oldName) { t.assignee = trimmed; t.updatedAt = Date.now(); } });
           appState.expenses.forEach(e => { if (e.paidBy === oldName) { e.paidBy = trimmed; e.updatedAt = Date.now(); } });
           if (appState.currentUser === oldName) appState.currentUser = trimmed;
@@ -1279,7 +1291,7 @@
 
     function clearActivityLogs() {
       appState.activityLogs = [];
-      saveState();
+      saveState(true);
     }
 
     function updateMorningTime(val) {
@@ -1289,8 +1301,8 @@
       showPushBanner('⏰ 提醒時間已更新', `每日早晨提醒已設定為 ${val}`, '系統設定');
     }
 
-    // ================= 沙盒安全 P2P 同步通道與 WhatsApp 離線碼 =================
-    let currentRoomCode = '';
+    // ================= 本機 BroadcastChannel 與 WhatsApp 離線碼 =================
+    let currentRoomCode = localStorage.getItem('HOMESYNC_ROOM_CODE') || '';
     let syncChannel = null;
 
     function initSafeSyncChannel() {
@@ -1307,64 +1319,23 @@
               appState.expenses = mergeCRDTLists(appState.expenses, data.state.expenses || []);
               appState.households = mergeCRDTLists(appState.households, data.state.households || []);
               appState.members = mergeCRDTLists(appState.members, data.state.members || []);
-              saveState();
-              showPushBanner('🔗 雙向握手同步成功', `已與房間 ${currentRoomCode} 的裝置完成無損合併！`, 'P2P 同步');
+              saveState(true);
             } else if (data.type === 'BROADCAST_ACTIVITY') {
               appState.tasks = mergeCRDTLists(appState.tasks, data.fullState.tasks || []);
               appState.expenses = mergeCRDTLists(appState.expenses, data.fullState.expenses || []);
               addActivityLog(data.notification.fullText, 'remote_broadcast');
               showPushBanner(data.notification.title, data.notification.body, '家人即時廣播');
-              saveState();
+              saveState(true);
             }
           };
         }
       } catch (e) {}
     }
 
-    function createOrRefreshP2P() {
-      currentRoomCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const displayEl = document.getElementById('myPeerIdDisplay');
-      if (displayEl) displayEl.innerText = currentRoomCode;
-      initSafeSyncChannel();
-      document.getElementById('syncStatusLabel').innerText = `房間 #${currentRoomCode} 待命中`;
-    }
-
-    function connectToPeer() {
-      const target = document.getElementById('targetPeerIdInput').value.trim();
-      if (!target) {
-        showPushBanner('⚠️ 請輸入房間碼', '請輸入家人的 6 位數房間同步碼以進行雙向合併', '同步提示');
-        return;
-      }
-      currentRoomCode = target;
-      document.getElementById('myPeerIdDisplay').innerText = currentRoomCode;
-      initSafeSyncChannel();
-
-      document.getElementById('syncStatusLabel').innerText = `P2P 房間 #${currentRoomCode} 雙向連通`;
-      document.getElementById('syncStatusDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
-
-      if (syncChannel) {
-        try {
-          syncChannel.postMessage({
-            type: 'SYNC_HANDSHAKE',
-            roomCode: currentRoomCode,
-            state: appState
-          });
-        } catch (e) {}
-      }
-      addActivityLog(`已連入房間 #${currentRoomCode} 並發起 CRDT 雙向無損握手同步`);
-      showPushBanner('🔗 P2P 房間連線成功', `已連入房間 #${currentRoomCode}，你的離線資料已安全保留並雙向同步！`, 'P2P 雙向同步');
-      saveState();
-    }
-
     function copySyncCodeWhatsApp() {
       const dataStr = btoa(encodeURIComponent(JSON.stringify(appState)));
       const text = `【家友記同步碼】請複製貼上至家友記：\n${dataStr}`;
-      const input = document.createElement('textarea');
-      input.value = text;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
+      navigator.clipboard.writeText(text);
       showPushBanner('📋 同步碼已複製！', '可直接貼上至 WhatsApp 傳送給屋企人進行智能合併', '離線同步碼');
     }
 
@@ -1400,15 +1371,225 @@
       }
     }
 
-    // 初始化啟動
     window.onload = function () {
       const timeInput = document.getElementById('morningRemindTimeInput');
       if (timeInput && appState.notificationSettings) {
         timeInput.value = appState.notificationSettings.morningTime || '08:30';
       }
       renderAll();
-      createOrRefreshP2P();
+      initSafeSyncChannel();
     };
+  </script>
+
+  <!-- ================= 🔥 FIREBASE 雲端房間同步引擎 (新增模組) ================= -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    // ⚠️ 你可以直接將你條 Firebase 網址貼落下面呢度，或者喺 App 入面撳「設定網址」輸入！
+    const DEFAULT_FIREBASE_URL = "PASTE_YOUR_FIREBASE_URL_HERE";
+
+    let db = null;
+    let roomUnsubscribe = null;
+    let lastHandledBroadcastId = null;
+
+    function getSavedFirebaseUrl() {
+      const saved = localStorage.getItem('HOMESYNC_FIREBASE_URL');
+      if (saved && saved.startsWith('https://')) return saved;
+      if (DEFAULT_FIREBASE_URL.startsWith('https://')) return DEFAULT_FIREBASE_URL;
+      return '';
+    }
+
+    function initFirebaseEngine() {
+      const dbUrl = getSavedFirebaseUrl();
+      const statusTextEl = document.getElementById('firebaseUrlStatusText');
+
+      if (!dbUrl) {
+        if (statusTextEl) {
+          statusTextEl.innerHTML = `<span class="text-rose-500 font-bold">⚠️ 尚未設定 Firebase 網址（點右上角「設定網址」貼上）</span>`;
+        }
+        return false;
+      }
+
+      try {
+        const app = initializeApp({ databaseURL: dbUrl }, 'homesync_' + Date.now());
+        db = getDatabase(app);
+        if (statusTextEl) {
+          statusTextEl.innerHTML = `<span class="text-emerald-600 font-bold">✅ 已連結 Firebase 雲端伺服器</span>`;
+        }
+        return true;
+      } catch (err) {
+        console.error('Firebase init error:', err);
+        if (statusTextEl) {
+          statusTextEl.innerHTML = `<span class="text-rose-500 font-bold">❌ 網址格式有誤，請重新設定</span>`;
+        }
+        return false;
+      }
+    }
+
+    // 彈窗設定 Firebase 網址
+    window.promptFirebaseUrlSetup = function() {
+      const currentUrl = getSavedFirebaseUrl();
+      openCustomPrompt('貼上 Firebase Realtime Database 網址 (https://...)', currentUrl, (val) => {
+        if (val && val.trim().startsWith('https://')) {
+          localStorage.setItem('HOMESYNC_FIREBASE_URL', val.trim());
+          initFirebaseEngine();
+          showPushBanner('✅ 雲端網址已儲存！', '而家可以輸入房號同屋企人即時同步啦', 'Firebase 設定');
+          if (currentRoomCode) window.joinCloudRoom(currentRoomCode);
+        } else if (val) {
+          showPushBanner('❌ 網址格式唔啱', '請貼上 https:// 開頭嘅 Firebase Database 網址', '設定錯誤');
+        }
+      });
+    };
+
+    // 加入或建立雲端房間
+    window.joinCloudRoom = async function(code) {
+      const cleanCode = (code || '').trim().toUpperCase();
+      if (!cleanCode) return;
+
+      if (!db && !initFirebaseEngine()) {
+        switchTab('sync');
+        window.promptFirebaseUrlSetup();
+        return;
+      }
+
+      currentRoomCode = cleanCode;
+      localStorage.setItem('HOMESYNC_ROOM_CODE', currentRoomCode);
+      initSafeSyncChannel();
+
+      if (roomUnsubscribe) roomUnsubscribe();
+
+      // 對應你剛才喺 Firebase Rules 設定嘅 rooms/$roomId 路徑！
+      const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
+
+      try {
+        const snap = await get(roomRef);
+        if (snap.exists()) {
+          const remote = snap.val();
+          appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+          appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+          appState.households = mergeCRDTLists(appState.households, remote.households || []);
+          appState.members = mergeCRDTLists(appState.members, remote.members || []);
+          appState.choreCategories = mergeCRDTLists(appState.choreCategories, remote.choreCategories || []);
+          appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
+          if (remote.appName) appState.appName = remote.appName;
+        }
+        // 將融合後嘅最新狀態推上雲端
+        await window.pushStateToFirebase();
+      } catch (e) {
+        console.error('Room initial fetch error:', e);
+      }
+
+      // 24小時即時監聽屋企人嘅改動
+      roomUnsubscribe = onValue(roomRef, (snapshot) => {
+        const remote = snapshot.val();
+        if (!remote) return;
+
+        appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+        appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+        appState.households = mergeCRDTLists(appState.households, remote.households || []);
+        appState.members = mergeCRDTLists(appState.members, remote.members || []);
+        appState.choreCategories = mergeCRDTLists(appState.choreCategories, remote.choreCategories || []);
+        appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
+        if (remote.appName) appState.appName = remote.appName;
+
+        // 如果係屋企人剛剛觸發嘅動作，自動喺你部機彈出頂部通知橫幅！
+        if (remote.lastBroadcast && remote.lastBroadcast.id !== lastHandledBroadcastId) {
+          lastHandledBroadcastId = remote.lastBroadcast.id;
+          if (remote.lastBroadcast.actor !== appState.currentUser && (Date.now() - remote.lastBroadcast.timestamp < 30000)) {
+            showPushBanner(remote.lastBroadcast.title, remote.lastBroadcast.body, `房間 #${currentRoomCode} 同步`);
+          }
+        }
+
+        saveState(true);
+      });
+
+      updateRoomUI();
+      showPushBanner('☁️ 雲端房間已連通！', `正在同步房間 #${currentRoomCode}，全屋企人資料即時互通`, 'Firebase 同步');
+    };
+
+    // 推資料上雲端
+    window.pushStateToFirebase = async function() {
+      if (!db || !currentRoomCode) return;
+      try {
+        const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
+        await set(roomRef, {
+          appName: appState.appName,
+          tasks: appState.tasks,
+          expenses: appState.expenses,
+          households: appState.households,
+          members: appState.members,
+          choreCategories: appState.choreCategories,
+          expenseCategories: appState.expenseCategories,
+          lastBroadcast: appState.lastBroadcast || null,
+          updatedAt: Date.now()
+        });
+      } catch (e) {
+        console.error('Push to Firebase error:', e);
+      }
+    };
+
+    // 綁定 UI 按鈕動作
+    window.connectToPeer = function() {
+      const inputVal = document.getElementById('targetPeerIdInput').value.trim();
+      if (!inputVal) {
+        showPushBanner('⚠️ 請輸入房號', '請輸入自訂房號（例如 HOME88）', '提示');
+        return;
+      }
+      window.joinCloudRoom(inputVal);
+    };
+
+    window.leaveCloudRoom = function() {
+      if (roomUnsubscribe) roomUnsubscribe();
+      roomUnsubscribe = null;
+      currentRoomCode = '';
+      localStorage.removeItem('HOMESYNC_ROOM_CODE');
+      updateRoomUI();
+      showPushBanner('👋 已離開雲端房間', '目前已切換回本機單人模式', '房間狀態');
+    };
+
+    window.shareRoomLink = function() {
+      if (!currentRoomCode) {
+        showPushBanner('⚠️ 尚未入房', '請先輸入房號連入房間，再複製邀請連結', '提示');
+        return;
+      }
+      const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomCode}`;
+      navigator.clipboard.writeText(url);
+      showPushBanner('🔗 房間連結已複製！', `Send 俾屋企人一撳即入 #${currentRoomCode} 房`, '邀請家人');
+    };
+
+    function updateRoomUI() {
+      const displayEl = document.getElementById('myPeerIdDisplay');
+      const inputEl = document.getElementById('targetPeerIdInput');
+      const labelEl = document.getElementById('syncStatusLabel');
+      const dotEl = document.getElementById('syncStatusDot');
+
+      if (currentRoomCode) {
+        if (displayEl) displayEl.innerText = `#${currentRoomCode} (即時連線中)`;
+        if (inputEl) inputEl.value = currentRoomCode;
+        if (labelEl) labelEl.innerText = `☁️ 雲端房 #${currentRoomCode}`;
+        if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
+      } else {
+        if (displayEl) displayEl.innerText = '未入房 (單機模式)';
+        if (inputEl) inputEl.value = '';
+        if (labelEl) labelEl.innerText = '本機模式 (點此入房同步)';
+        if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+      }
+    }
+
+    // 啟動時檢查網址有冇 ?room=XXXX 或者之前存低嘅房號
+    window.addEventListener('DOMContentLoaded', () => {
+      initFirebaseEngine();
+      const params = new URLSearchParams(window.location.search);
+      const roomFromUrl = params.get('room');
+      if (roomFromUrl) {
+        window.joinCloudRoom(roomFromUrl);
+      } else if (currentRoomCode && getSavedFirebaseUrl()) {
+        window.joinCloudRoom(currentRoomCode);
+      } else {
+        updateRoomUI();
+      }
+    });
   </script>
 </body>
 </html>
