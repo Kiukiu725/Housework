@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家友記 - 香港家庭雜務與開支管理</title>
+  
+  <!-- 手機主畫面 App Icon 設定 (上傳 icon.png 到 GitHub 即可生效) -->
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" type="image/png" href="icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="家友記">
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -56,8 +63,9 @@
       <div class="flex items-center justify-between gap-2">
         <!-- App 名稱 & 狀態 -->
         <div class="flex items-center gap-2.5 min-w-0">
-          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
-            <i data-lucide="home" class="w-5 h-5"></i>
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0 overflow-hidden">
+            <img src="icon.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" class="w-full h-full object-cover">
+            <i data-lucide="home" class="w-5 h-5 hidden"></i>
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-1.5 cursor-pointer" onclick="openAppNameModal()">
@@ -67,7 +75,7 @@
             <div class="flex items-center gap-1.5 mt-0.5">
               <button onclick="switchTab('sync')" id="syncStatusBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <span id="syncStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span id="syncStatusLabel">本機模式 (點此入房同步)</span>
+                <span id="syncStatusLabel">點此輸入房號同步</span>
               </button>
             </div>
           </div>
@@ -220,41 +228,33 @@
       <div id="adminPanelContainer" class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs"></div>
     </section>
 
-    <!-- TAB 5: Firebase 雲端房間同步 + 離線同步 -->
+    <!-- TAB 5: 雲端房間同步 (只須輸入房號) -->
     <section id="viewSync" class="space-y-4 hidden">
       <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-              <i data-lucide="cloud" class="w-5 h-5"></i>
-            </div>
-            <div>
-              <h3 class="text-sm font-extrabold text-slate-900">Firebase 雲端房間即時同步</h3>
-              <p class="text-xs text-slate-400">輸入同一個房號，全屋企人 24 小時自動雙向無損同步</p>
-            </div>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+            <i data-lucide="cloud" class="w-5 h-5"></i>
           </div>
-          <button onclick="promptFirebaseUrlSetup()" class="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[11px] shrink-0">
-            設定網址
-          </button>
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900">房間同步（只需輸入房號）</h3>
+            <p class="text-xs text-slate-400">同屋企人輸入同一個房號，即可 24 小時自動雙向同步</p>
+          </div>
         </div>
 
         <!-- 雲端連線狀態卡片 -->
-        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">目前雲端房間號</span>
+            <span class="text-xs font-bold text-slate-700">目前房間狀態</span>
             <span id="myPeerIdDisplay" class="text-xs font-mono font-extrabold text-emerald-600 tracking-wider">未入房 (單機模式)</span>
-          </div>
-          <div id="firebaseUrlStatusBox" class="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200/60">
-            <span id="firebaseUrlStatusText">檢查緊 Firebase 網址設定...</span>
           </div>
         </div>
 
         <!-- 輸入房號開房 / 入房 -->
         <div class="space-y-2">
-          <label class="text-xs font-bold text-slate-700 block">開新房間 / 加入屋企人房間</label>
+          <label class="text-xs font-bold text-slate-700 block">輸入房間號碼（開新房 / 加入房間）</label>
           <div class="flex gap-2">
-            <input type="text" id="targetPeerIdInput" placeholder="輸入房號 (例如: HOME88)" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
-            <button onclick="connectToPeer()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs shrink-0">
+            <input type="text" id="targetPeerIdInput" placeholder="例如: HOME88 或 123456" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <button onclick="connectToPeer()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs shrink-0 active:scale-95 transition-all">
               連入房間
             </button>
           </div>
@@ -264,28 +264,19 @@
         <div class="grid grid-cols-2 gap-2">
           <button onclick="shareRoomLink()" class="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors">
             <i data-lucide="link" class="w-3.5 h-3.5"></i>
-            <span>複製房間邀請 Link</span>
+            <span>複製邀請 Link (免打房號)</span>
           </button>
           <button onclick="leaveCloudRoom()" class="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors">
             <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-            <span>離開房間 (轉單機)</span>
-          </button>
-        </div>
-
-        <!-- 離線雙向合併模擬器 -->
-        <div class="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 space-y-2.5">
-          <span class="text-xs font-bold text-indigo-900 block">離線雙向合併模擬器 (單機測試)</span>
-          <p class="text-[11px] text-slate-500">你可以先離線新增家務或開支，然後點擊此按鈕，即時驗證你的離線資料零丟失，並與家人新資料自動融合！</p>
-          <button onclick="simulateOfflineMerge()" class="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-extrabold text-xs shadow-xs">
-            一鍵模擬家人雙向無損合併
+            <span>離開房間</span>
           </button>
         </div>
 
         <!-- 離線同步碼分享 (WhatsApp 後備方案) -->
-        <div class="pt-2 border-t border-slate-100 flex gap-2">
+        <div class="pt-3 border-t border-slate-100 flex gap-2">
           <button onclick="copySyncCodeWhatsApp()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
-            <span>複製離線碼發 WhatsApp</span>
+            <span>複製離線備份碼</span>
           </button>
           <button onclick="importSyncCodePrompt()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs">
             貼上匯入
@@ -317,7 +308,7 @@
       </button>
       <button onclick="switchTab('sync')" id="tabBtn_sync" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all">
         <i data-lucide="cloud" class="w-5 h-5"></i>
-        <span class="text-[10px]">雲端同步</span>
+        <span class="text-[10px]">房間同步</span>
       </button>
     </div>
   </nav>
@@ -580,7 +571,6 @@
       return defaultState;
     })();
 
-    // 當 isFromCloud 為 true 時，只存本機，唔會無限 Loop 再推返上雲端
     function saveState(isFromCloud = false) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
@@ -641,12 +631,10 @@
       if (appState.activityLogs.length > 50) appState.activityLogs.pop();
     }
 
-    // 廣播動作給房間所有人 (同時支援 Firebase 雲端推播 + 本機分頁廣播)
     function broadcastAction(actionType, detail, notificationMsg) {
       addActivityLog(notificationMsg.fullText, actionType);
       showPushBanner(notificationMsg.title, notificationMsg.body, '家人動態廣播');
       
-      // 記錄最後一個廣播事件，等屋企人部電話一收到雲端更新就彈 Banner
       appState.lastBroadcast = {
         id: 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
         actor: appState.currentUser,
@@ -749,43 +737,6 @@
         }
       });
       return Array.from(map.values());
-    }
-
-    function simulateOfflineMerge() {
-      const simulatedRemoteTasks = [
-        {
-          id: 't_remote_' + Date.now(),
-          title: '媽咪離線入嘅：買新鮮生果',
-          householdId: appState.households[0].id,
-          category: '採購',
-          assignee: '媽咪',
-          plannedDate: todayStr,
-          hasDueDate: false,
-          completed: false,
-          updatedAt: Date.now(),
-          deleted: false
-        }
-      ];
-      const simulatedRemoteExpenses = [
-        {
-          id: 'e_remote_' + Date.now(),
-          title: '老公離線入嘅：超市買米油',
-          amount: 145,
-          householdId: appState.households[0].id,
-          category: '日用品',
-          paidBy: '老公',
-          date: todayStr,
-          updatedAt: Date.now(),
-          deleted: false
-        }
-      ];
-
-      appState.tasks = mergeCRDTLists(appState.tasks, simulatedRemoteTasks);
-      appState.expenses = mergeCRDTLists(appState.expenses, simulatedRemoteExpenses);
-      saveState();
-
-      showPushBanner('🔄 雙向無損合併成功！', '收到 1 項家人離線家務及 1 筆開支，你的本機紀錄已完整保留。', 'CRDT 同步');
-      addActivityLog('完成單機雙向無損合併模擬：成功融合雙方離線紀錄');
     }
 
     function renderAll() {
@@ -1301,7 +1252,6 @@
       showPushBanner('⏰ 提醒時間已更新', `每日早晨提醒已設定為 ${val}`, '系統設定');
     }
 
-    // ================= 本機 BroadcastChannel 與 WhatsApp 離線碼 =================
     let currentRoomCode = localStorage.getItem('HOMESYNC_ROOM_CODE') || '';
     let syncChannel = null;
 
@@ -1381,77 +1331,24 @@
     };
   </script>
 
-  <!-- ================= 🔥 FIREBASE 雲端房間同步引擎 (新增模組) ================= -->
+  <!-- ================= 🔥 內置你專屬網址嘅 FIREBASE 房間同步引擎 ================= -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    // ⚠️ 你可以直接將你條 Firebase 網址貼落下面呢度，或者喺 App 入面撳「設定網址」輸入！
-    const DEFAULT_FIREBASE_URL = "PASTE_YOUR_FIREBASE_URL_HERE";
+    // ✅ 已經直接寫死咗你條專屬 Firebase 網址，所有人都唔使再貼網址！
+    const FIREBASE_DATABASE_URL = "https://kiu-s-project-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-    let db = null;
+    const app = initializeApp({ databaseURL: FIREBASE_DATABASE_URL });
+    const db = getDatabase(app);
+
     let roomUnsubscribe = null;
     let lastHandledBroadcastId = null;
 
-    function getSavedFirebaseUrl() {
-      const saved = localStorage.getItem('HOMESYNC_FIREBASE_URL');
-      if (saved && saved.startsWith('https://')) return saved;
-      if (DEFAULT_FIREBASE_URL.startsWith('https://')) return DEFAULT_FIREBASE_URL;
-      return '';
-    }
-
-    function initFirebaseEngine() {
-      const dbUrl = getSavedFirebaseUrl();
-      const statusTextEl = document.getElementById('firebaseUrlStatusText');
-
-      if (!dbUrl) {
-        if (statusTextEl) {
-          statusTextEl.innerHTML = `<span class="text-rose-500 font-bold">⚠️ 尚未設定 Firebase 網址（點右上角「設定網址」貼上）</span>`;
-        }
-        return false;
-      }
-
-      try {
-        const app = initializeApp({ databaseURL: dbUrl }, 'homesync_' + Date.now());
-        db = getDatabase(app);
-        if (statusTextEl) {
-          statusTextEl.innerHTML = `<span class="text-emerald-600 font-bold">✅ 已連結 Firebase 雲端伺服器</span>`;
-        }
-        return true;
-      } catch (err) {
-        console.error('Firebase init error:', err);
-        if (statusTextEl) {
-          statusTextEl.innerHTML = `<span class="text-rose-500 font-bold">❌ 網址格式有誤，請重新設定</span>`;
-        }
-        return false;
-      }
-    }
-
-    // 彈窗設定 Firebase 網址
-    window.promptFirebaseUrlSetup = function() {
-      const currentUrl = getSavedFirebaseUrl();
-      openCustomPrompt('貼上 Firebase Realtime Database 網址 (https://...)', currentUrl, (val) => {
-        if (val && val.trim().startsWith('https://')) {
-          localStorage.setItem('HOMESYNC_FIREBASE_URL', val.trim());
-          initFirebaseEngine();
-          showPushBanner('✅ 雲端網址已儲存！', '而家可以輸入房號同屋企人即時同步啦', 'Firebase 設定');
-          if (currentRoomCode) window.joinCloudRoom(currentRoomCode);
-        } else if (val) {
-          showPushBanner('❌ 網址格式唔啱', '請貼上 https:// 開頭嘅 Firebase Database 網址', '設定錯誤');
-        }
-      });
-    };
-
-    // 加入或建立雲端房間
+    // 加入或建立雲端房間 (只需房號)
     window.joinCloudRoom = async function(code) {
       const cleanCode = (code || '').trim().toUpperCase();
       if (!cleanCode) return;
-
-      if (!db && !initFirebaseEngine()) {
-        switchTab('sync');
-        window.promptFirebaseUrlSetup();
-        return;
-      }
 
       currentRoomCode = cleanCode;
       localStorage.setItem('HOMESYNC_ROOM_CODE', currentRoomCode);
@@ -1459,7 +1356,7 @@
 
       if (roomUnsubscribe) roomUnsubscribe();
 
-      // 對應你剛才喺 Firebase Rules 設定嘅 rooms/$roomId 路徑！
+      // 對應你喺 Firebase Rules 設定嘅 rooms/$roomId 路徑
       const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
 
       try {
@@ -1474,13 +1371,11 @@
           appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
           if (remote.appName) appState.appName = remote.appName;
         }
-        // 將融合後嘅最新狀態推上雲端
         await window.pushStateToFirebase();
       } catch (e) {
         console.error('Room initial fetch error:', e);
       }
 
-      // 24小時即時監聽屋企人嘅改動
       roomUnsubscribe = onValue(roomRef, (snapshot) => {
         const remote = snapshot.val();
         if (!remote) return;
@@ -1493,7 +1388,6 @@
         appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
         if (remote.appName) appState.appName = remote.appName;
 
-        // 如果係屋企人剛剛觸發嘅動作，自動喺你部機彈出頂部通知橫幅！
         if (remote.lastBroadcast && remote.lastBroadcast.id !== lastHandledBroadcastId) {
           lastHandledBroadcastId = remote.lastBroadcast.id;
           if (remote.lastBroadcast.actor !== appState.currentUser && (Date.now() - remote.lastBroadcast.timestamp < 30000)) {
@@ -1505,12 +1399,11 @@
       });
 
       updateRoomUI();
-      showPushBanner('☁️ 雲端房間已連通！', `正在同步房間 #${currentRoomCode}，全屋企人資料即時互通`, 'Firebase 同步');
+      showPushBanner('☁️ 房間已連通！', `已進入房間 #${currentRoomCode}，屋企人輸入同一個房號即可同步`, '雲端同步');
     };
 
-    // 推資料上雲端
     window.pushStateToFirebase = async function() {
-      if (!db || !currentRoomCode) return;
+      if (!currentRoomCode) return;
       try {
         const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
         await set(roomRef, {
@@ -1529,7 +1422,6 @@
       }
     };
 
-    // 綁定 UI 按鈕動作
     window.connectToPeer = function() {
       const inputVal = document.getElementById('targetPeerIdInput').value.trim();
       if (!inputVal) {
@@ -1545,7 +1437,7 @@
       currentRoomCode = '';
       localStorage.removeItem('HOMESYNC_ROOM_CODE');
       updateRoomUI();
-      showPushBanner('👋 已離開雲端房間', '目前已切換回本機單人模式', '房間狀態');
+      showPushBanner('👋 已離開房間', '目前已切換回本機單人模式', '房間狀態');
     };
 
     window.shareRoomLink = function() {
@@ -1555,7 +1447,7 @@
       }
       const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomCode}`;
       navigator.clipboard.writeText(url);
-      showPushBanner('🔗 房間連結已複製！', `Send 俾屋企人一撳即入 #${currentRoomCode} 房`, '邀請家人');
+      showPushBanner('🔗 邀請連結已複製！', `Send 俾屋企人一撳即自動入 #${currentRoomCode} 房`, '邀請家人');
     };
 
     function updateRoomUI() {
@@ -1565,26 +1457,25 @@
       const dotEl = document.getElementById('syncStatusDot');
 
       if (currentRoomCode) {
-        if (displayEl) displayEl.innerText = `#${currentRoomCode} (即時連線中)`;
+        if (displayEl) displayEl.innerText = `房號 #${currentRoomCode} (即時同步中)`;
         if (inputEl) inputEl.value = currentRoomCode;
-        if (labelEl) labelEl.innerText = `☁️ 雲端房 #${currentRoomCode}`;
+        if (labelEl) labelEl.innerText = `☁️ 房號 #${currentRoomCode}`;
         if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
       } else {
         if (displayEl) displayEl.innerText = '未入房 (單機模式)';
         if (inputEl) inputEl.value = '';
-        if (labelEl) labelEl.innerText = '本機模式 (點此入房同步)';
+        if (labelEl) labelEl.innerText = '點此輸入房號同步';
         if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
       }
     }
 
-    // 啟動時檢查網址有冇 ?room=XXXX 或者之前存低嘅房號
+    // 啟動時：如果網址有 ?room=XXXX 或者之前入過房，自動入返同一間房！
     window.addEventListener('DOMContentLoaded', () => {
-      initFirebaseEngine();
       const params = new URLSearchParams(window.location.search);
       const roomFromUrl = params.get('room');
       if (roomFromUrl) {
         window.joinCloudRoom(roomFromUrl);
-      } else if (currentRoomCode && getSavedFirebaseUrl()) {
+      } else if (currentRoomCode) {
         window.joinCloudRoom(currentRoomCode);
       } else {
         updateRoomUI();
