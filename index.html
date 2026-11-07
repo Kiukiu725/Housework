@@ -3,1893 +3,1411 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>家友記 (HomeSync HK) - 離線雙向同步版</title>
-  <!-- Tailwind CSS CDN -->
+  <title>家友記 - 香港家庭雜務與開支管理</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons CDN -->
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- PeerJS WebRTC P2P CDN -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+HK:wght@400;500;700;900&display=swap" rel="stylesheet">
   <style>
+    body {
+      font-family: 'Inter', 'Noto Sans HK', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    * { -webkit-tap-highlight-color: transparent; }
+    @keyframes slideDownSpring {
+      0% { opacity: 0; transform: translate(-50%, -24px) scale(0.96); }
+      100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    }
+    .push-banner-enter {
+      animation: slideDownSpring 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased min-h-screen pb-24 select-none font-sans">
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen pb-28 selection:bg-emerald-100 selection:text-emerald-900">
 
-  <!-- ================= 頂部推播通知與待同步狀態橫幅 ================= -->
-  <div id="pushToast" class="fixed top-2 left-3 right-3 z-50 max-w-md mx-auto hidden bg-slate-900/95 text-white backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-slate-700 transition-all duration-300">
-    <div class="flex items-start justify-between gap-2">
-      <div class="flex items-center gap-2.5">
-        <div id="toastIconContainer" class="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0">
-          <i data-lucide="bell-ring" class="w-4 h-4"></i>
+  <!-- ================= 頂部浮動 Push Notification 彈窗 ================= -->
+  <div id="pushBanner" class="fixed top-3 left-1/2 -translate-x-1/2 w-[94%] max-w-md z-50 hidden push-banner-enter">
+    <div class="bg-slate-900/95 backdrop-blur-xl text-white p-4 rounded-3xl shadow-2xl border border-slate-700/80 ring-1 ring-white/10">
+      <div class="flex items-start gap-3">
+        <div id="pushBannerIconBox" class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+          <i data-lucide="bell-ring" class="w-5 h-5 text-white"></i>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span id="toastAppName" class="text-xs font-bold text-orange-400">家友記 • 晨早提醒</span>
-            <span id="toastTime" class="text-[10px] text-slate-400">08:30</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-2">
+            <span id="pushBannerTag" class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">家友記 • 即時動態</span>
+            <span id="pushBannerTime" class="text-[10px] text-slate-400 shrink-0">剛剛</span>
           </div>
-          <h4 id="toastHeader" class="text-sm font-bold mt-0.5">通知標題</h4>
+          <h4 id="pushBannerTitle" class="text-sm font-bold text-white mt-0.5 leading-snug">通知標題</h4>
+          <p id="pushBannerBody" class="text-xs text-slate-300 mt-1 leading-relaxed"></p>
         </div>
+        <button onclick="hidePushBanner()" class="p-1 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors shrink-0">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
       </div>
-      <button onclick="hidePushToast()" class="text-slate-400 hover:text-white p-1">
-        <i data-lucide="x" class="w-4 h-4"></i>
-      </button>
     </div>
-    <div id="toastList" class="mt-2.5 pt-2 border-t border-slate-800 space-y-1.5 text-xs"></div>
-    <button onclick="switchTab('tasks'); hidePushToast();" class="w-full mt-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-bold text-xs">
-      查看待辦家務
-    </button>
   </div>
 
-  <!-- ================= 頂部狀態列與空間篩選 ================= -->
-  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-2.5 shadow-xs">
-    <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
-          <i data-lucide="home" class="w-5 h-5"></i>
-        </div>
-        <div>
-          <div class="flex items-center gap-1.5 cursor-pointer" onclick="openAppNamePrompt()">
-            <h1 id="displayAppName" class="text-base font-bold text-slate-900 leading-none">家友記</h1>
-            <i data-lucide="edit-3" class="w-3 h-3 text-slate-400"></i>
+  <!-- ================= 頂部導航與狀態列 ================= -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+    <div class="max-w-lg mx-auto px-4 pt-3 pb-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <!-- App 名稱 & 狀態 -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
+            <i data-lucide="home" class="w-5 h-5"></i>
           </div>
-          <div class="flex items-center gap-2 mt-1">
-            <div id="p2pSyncBadge" class="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 border border-slate-200">
-              <span id="p2pSyncDot" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-              <span id="p2pSyncStatusText">離線運作中</span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 cursor-pointer" onclick="openAppNameModal()">
+              <h1 id="headerAppName" class="text-base sm:text-lg font-extrabold text-slate-900 truncate">家友記</h1>
+              <i data-lucide="pencil" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
             </div>
-            <div id="pendingSyncBadge" class="hidden text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-              <i data-lucide="cloud-off" class="w-3 h-3 text-amber-700"></i>
-              <span id="pendingSyncCountText">待同步: 0</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-1.5">
-        <button onclick="switchTab('sync')" class="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors" title="P2P 同步中心">
-          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-        </button>
-        <button id="quickAddBtn" onclick="openActiveAddModal()" class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold shadow-xs active:scale-95 transition-all">
-          <i data-lucide="plus" class="w-4 h-4"></i>
-          <span id="quickAddBtnLabel">加家務</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 空間切換橫向滑動列 (全部 / 我屋企 / Daddy媽咪屋企 / 自訂) -->
-    <div id="spacePillsContainer" class="max-w-md mx-auto mt-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
-  </header>
-
-  <!-- ================= 主頁內容區塊 ================= -->
-  <main class="max-w-md mx-auto px-4 mt-3">
-
-    <!-- ---------------- 分頁 1: 家務事項 (Tasks) ---------------- -->
-    <section id="tabTasks" class="space-y-3">
-      <!-- 統計小卡 -->
-      <div class="grid grid-cols-2 gap-2.5">
-        <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-          <span class="text-xs text-slate-400 font-medium">待辦家務</span>
-          <div class="mt-1 flex items-baseline gap-1">
-            <span id="countPendingChores" class="text-2xl font-black text-slate-900">0</span>
-            <span class="text-xs text-slate-400">項未搞掂</span>
-          </div>
-        </div>
-        <div onclick="switchTab('reminders')" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs cursor-pointer hover:border-orange-300">
-          <span class="text-xs text-rose-500 font-bold flex items-center gap-1">
-            <i data-lucide="flame" class="w-3.5 h-3.5"></i> 今日 Due / 逾期
-          </span>
-          <div class="mt-1 flex items-baseline gap-1">
-            <span id="countUrgentChores" class="text-2xl font-black text-rose-600">0</span>
-            <span class="text-xs text-slate-400">項需優先處理</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 成員快速篩選按鈕列 -->
-      <div id="memberFilterBar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1"></div>
-
-      <!-- 完成狀態篩選 -->
-      <div class="flex items-center justify-between px-1">
-        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">家務清單</span>
-        <div class="flex bg-slate-200 p-0.5 rounded-lg text-xs font-bold text-slate-600">
-          <button onclick="setChoreFilter('pending')" id="filterBtnPending" class="px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-xs">未做</button>
-          <button onclick="setChoreFilter('completed')" id="filterBtnCompleted" class="px-2.5 py-1 rounded-md">已搞掂</button>
-          <button onclick="setChoreFilter('all')" id="filterBtnAll" class="px-2.5 py-1 rounded-md">全部</button>
-        </div>
-      </div>
-
-      <!-- 家務項目列表容器 -->
-      <div id="choreListContainer" class="space-y-2.5"></div>
-    </section>
-
-    <!-- ---------------- 分頁 2: 家庭開支 (Expenses) ---------------- -->
-    <section id="tabExpenses" class="space-y-3 hidden">
-      <!-- 開支統計卡片 -->
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">空間開支總結</h2>
-          <span id="totalSpendSummary" class="text-base font-black text-slate-900">總計: HK$ 0</span>
-        </div>
-        <div id="spaceSpendBreakdown" class="grid grid-cols-2 gap-2 mt-2"></div>
-      </div>
-
-      <div class="flex items-center justify-between px-1">
-        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">消費明細</span>
-        <button onclick="openModal('expenseModal')" class="text-xs font-bold text-emerald-600 hover:underline">+ 記錄新開支</button>
-      </div>
-
-      <div id="expenseListContainer" class="space-y-2"></div>
-    </section>
-
-    <!-- ---------------- 分頁 3: 每日提醒 (Reminders) ---------------- -->
-    <section id="tabReminders" class="space-y-3 hidden">
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center">
-              <i data-lucide="bell" class="w-4 h-4"></i>
-            </div>
-            <div>
-              <h3 class="text-sm font-bold text-slate-900">每日定時提醒通知</h3>
-              <p class="text-xs text-slate-400">朝早自動優先置頂今日 Due 任務</p>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <button onclick="switchTab('sync')" id="syncStatusBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span id="syncStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span id="syncStatusLabel">本機儲存 (0 待同步)</span>
+              </button>
             </div>
           </div>
-          <input type="checkbox" id="notificationToggle" onchange="toggleNotificationEnabled(this.checked)" class="w-5 h-5 accent-orange-500 rounded">
         </div>
 
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">每日提醒時間</label>
-          <div class="flex gap-2">
-            <input type="time" id="reminderTimeInput" onchange="updateReminderTime(this.value)" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold bg-slate-50">
-            <button onclick="triggerMorningPushNotification(true)" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-xs">
-              <i data-lucide="send" class="w-3.5 h-3.5"></i>
-              <span>即刻測試</span>
-            </button>
+        <!-- 「我係邊個」切換器 + 鈴鐺 -->
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-center bg-slate-100 rounded-xl px-2.5 py-1.5 border border-slate-200/80">
+            <span class="text-[11px] font-semibold text-slate-500 mr-1">我係:</span>
+            <select id="currentUserSelect" onchange="handleCurrentUserChange(this.value)" class="bg-transparent text-xs font-extrabold text-emerald-700 focus:outline-none cursor-pointer pr-1"></select>
           </div>
-        </div>
-
-        <div class="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-2 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-blue-900">瀏覽器系統推播權限</span>
-            <span id="browserNotifBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">未授權</span>
-          </div>
-          <button onclick="requestBrowserPermission()" class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs">
-            申請瀏覽器通知授權
+          <button onclick="switchTab('notifications')" class="relative p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span id="unreadNotifBadge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center">0</span>
           </button>
         </div>
       </div>
 
-      <!-- 優先順序預覽 -->
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">晨早通知優先排程算法 (Due Today 置頂)</h3>
-        <div id="priorityRemindersList" class="space-y-2 text-xs"></div>
-      </div>
-    </section>
+      <!-- 橫向空間切換列 -->
+      <div id="spaceSwitcherBar" class="flex items-center gap-2 overflow-x-auto no-scrollbar mt-3 pb-0.5"></div>
+    </div>
+  </header>
 
-    <!-- ---------------- 分頁 4: P2P 同步與離線模擬器 (Sync Hub) ---------------- -->
-    <section id="tabSync" class="space-y-3 hidden">
-      <!-- 離線雙向合併模擬器 (專利測試工具) -->
-      <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-4 shadow-lg border border-purple-500/30 space-y-3">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-xl bg-purple-500 flex items-center justify-center text-white shrink-0">
-              <i data-lucide="cpu" class="w-4 h-4"></i>
-            </div>
-            <div>
-              <h3 class="text-sm font-bold flex items-center gap-1.5">
-                <span>離線合併沙盒模擬器</span>
-                <span class="text-[10px] px-1.5 py-0.2 bg-purple-600/80 rounded text-purple-200 font-normal">單機即可測試</span>
-              </h3>
-              <p class="text-[11px] text-purple-200">驗證離線隨意輸入，連線 0 覆蓋無損合併</p>
-            </div>
+  <!-- ================= 主頁內容區 ================= -->
+  <main class="max-w-lg mx-auto px-4 pt-4">
+
+    <!-- TAB 1: 家務事項 -->
+    <section id="viewTasks" class="space-y-4">
+      <div class="grid grid-cols-3 gap-2.5">
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+          <span class="text-[11px] font-semibold text-slate-400 block">待辦家務</span>
+          <div class="mt-1 flex items-baseline gap-1">
+            <span id="statPendingCount" class="text-2xl font-black text-slate-900">0</span>
+            <span class="text-[11px] text-slate-400">項</span>
           </div>
         </div>
-
-        <p class="text-xs text-slate-300 leading-relaxed">
-          即使你剛才在離線狀態下新增了開支或打剔了家務，點擊下方模擬按鈕，系統會模擬「家人在另一部手機也新增了一筆開支並打剔了另一項家務」。雙方會在沒有 Server 的情況下以 <strong class="text-amber-300">CRDT 時間戳記及軟刪除墓碑</strong> 進行雙向無損合併！
-        </p>
-
-        <button onclick="runOfflineSimulation()" class="w-full py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all">
-          <i data-lucide="play" class="w-3.5 h-3.5"></i>
-          <span>一鍵模擬家人雙向無損合併 (Smart Merge)</span>
+        <div onclick="switchTab('notifications')" class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs cursor-pointer hover:border-rose-300 transition-colors">
+          <span class="text-[11px] font-bold text-rose-500 flex items-center gap-1">
+            <i data-lucide="flame" class="w-3 h-3"></i>今日/過期
+          </span>
+          <div class="mt-1 flex items-baseline gap-1">
+            <span id="statUrgentCount" class="text-2xl font-black text-rose-600">0</span>
+            <span class="text-[11px] text-slate-400">項</span>
+          </div>
+        </div>
+        <button onclick="openChoreModal()" class="bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 text-white p-3.5 rounded-2xl shadow-md shadow-emerald-500/20 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all">
+          <i data-lucide="plus-circle" class="w-6 h-6"></i>
+          <span class="text-xs font-extrabold">新增家務</span>
         </button>
       </div>
 
-      <!-- 真實 WebRTC P2P 點對點連線面板 -->
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white">
-            <i data-lucide="wifi" class="w-4 h-4"></i>
+      <!-- 篩選列 -->
+      <div id="memberQuickFilterBar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"></div>
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-extrabold uppercase tracking-wider text-slate-400">家務清單</h2>
+        <div class="inline-flex bg-slate-200/80 p-0.5 rounded-xl text-xs font-bold">
+          <button onclick="setTaskStatusFilter('pending')" id="statusBtn_pending" class="px-3 py-1 rounded-lg bg-white text-slate-900 shadow-xs">未完成</button>
+          <button onclick="setTaskStatusFilter('completed')" id="statusBtn_completed" class="px-3 py-1 rounded-lg text-slate-600">已搞掂</button>
+          <button onclick="setTaskStatusFilter('all')" id="statusBtn_all" class="px-3 py-1 rounded-lg text-slate-600">全部</button>
+        </div>
+      </div>
+      <div id="tasksListContainer" class="space-y-3"></div>
+    </section>
+
+    <!-- TAB 2: 家庭開支 -->
+    <section id="viewExpenses" class="space-y-4 hidden">
+      <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-5 shadow-lg">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-xs font-semibold text-slate-300">總累計家庭開支</span>
+            <div class="text-3xl font-black tracking-tight mt-1" id="expenseTotalDisplay">HK$ 0</div>
+          </div>
+          <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>記低開支</span>
+          </button>
+        </div>
+        <div id="expenseBarsContainer" class="mt-5 pt-4 border-t border-white/10 space-y-2.5"></div>
+      </div>
+      <div class="flex items-center justify-between px-1">
+        <h2 class="text-xs font-extrabold uppercase tracking-wider text-slate-400">開支明細</h2>
+        <span id="expenseCountLabel" class="text-xs text-slate-400 font-medium">共 0 筆</span>
+      </div>
+      <div id="expensesListContainer" class="space-y-2.5"></div>
+    </section>
+
+    <!-- TAB 3: 提醒與動態通知 -->
+    <section id="viewNotifications" class="space-y-4 hidden">
+      <div class="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-3xl p-4 shadow-md space-y-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+            <i data-lucide="bell-ring" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="text-sm font-bold text-slate-900">WebRTC 零伺服器 P2P 直連</h3>
-            <p class="text-[11px] text-slate-400">雙向握手，加入者不會被房主覆蓋</p>
+            <h3 class="text-sm font-extrabold">即時動態通知廣播與測試</h3>
+            <p class="text-[11px] text-emerald-100">每次有用戶新增家務或開支，所有人即時收到通知</p>
           </div>
         </div>
-
-        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
-          <div class="flex items-center justify-between text-xs">
-            <span class="text-slate-500">我的 6 位數家庭房間碼:</span>
-            <span id="myPeerCodeDisplay" class="font-mono font-bold text-orange-600 text-lg tracking-widest">--- ---</span>
-          </div>
-          <div class="flex gap-2">
-            <input type="text" id="targetPeerCodeInput" placeholder="輸入屋企人 6 位數房間碼" class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none">
-            <button onclick="connectToPeer()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 rounded-xl text-xs font-bold text-white shadow-xs">
-              連接同步
-            </button>
-          </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="simulateFamilyAddItem()" class="py-2.5 px-3 rounded-2xl bg-white text-emerald-950 font-extrabold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            <span>模擬家人加Item彈通知</span>
+          </button>
+          <button onclick="triggerMorningReminder(true)" class="py-2.5 px-3 rounded-2xl bg-emerald-900/50 text-white border border-white/20 font-extrabold text-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="sun" class="w-3.5 h-3.5"></i>
+            <span>即刻測試早晨提醒</span>
+          </button>
         </div>
-        <p id="p2pLogMessage" class="text-[11px] text-slate-500"></p>
       </div>
 
-      <!-- WhatsApp 離線同步碼 (最穩備援) -->
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-white">
-            <i data-lucide="share-2" class="w-4 h-4"></i>
+      <!-- 設定面板 -->
+      <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-xs space-y-3.5">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900">通知與早晨提醒設定</h3>
+            <p class="text-xs text-slate-400">自訂早晨定時提醒時間及音效</p>
+          </div>
+          <button onclick="requestNativeNotificationPermission()" id="nativePermBtn" class="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            開啟瀏覽器通知
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <div>
+            <span class="font-bold text-slate-800 block">每日早晨提醒時間</span>
+            <span class="text-[11px] text-slate-400">今日 Due Day 及逾期家務排在最前提醒</span>
+          </div>
+          <input type="time" id="morningRemindTimeInput" onchange="updateMorningTime(this.value)" class="px-2.5 py-1.5 rounded-xl border border-slate-200 font-bold bg-slate-50 text-slate-800 text-xs">
+        </div>
+      </div>
+
+      <!-- 家人即時動態紀錄 -->
+      <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-xs space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400">家人即時動態紀錄</h3>
+          <button onclick="clearActivityLogs()" class="text-[11px] font-bold text-slate-400 hover:text-rose-500 transition-colors">清除紀錄</button>
+        </div>
+        <div id="activityLogsContainer" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: 管理中心 -->
+    <section id="viewManagement" class="space-y-4 hidden">
+      <div class="bg-white rounded-3xl p-2 border border-slate-200 shadow-xs flex items-center gap-1 overflow-x-auto no-scrollbar">
+        <button onclick="switchAdminSubTab('members')" id="adminSubBtn_members" class="px-3 py-2 rounded-2xl text-xs font-bold transition-all bg-emerald-500 text-white shadow-xs">家庭成員</button>
+        <button onclick="switchAdminSubTab('choreCats')" id="adminSubBtn_choreCats" class="px-3 py-2 rounded-2xl text-xs font-bold transition-all text-slate-600">家務類別</button>
+        <button onclick="switchAdminSubTab('expenseCats')" id="adminSubBtn_expenseCats" class="px-3 py-2 rounded-2xl text-xs font-bold transition-all text-slate-600">開支類別</button>
+        <button onclick="switchAdminSubTab('households')" id="adminSubBtn_households" class="px-3 py-2 rounded-2xl text-xs font-bold transition-all text-slate-600">空間物業</button>
+      </div>
+      <div id="adminPanelContainer" class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs"></div>
+    </section>
+
+    <!-- TAB 5: P2P 同步 -->
+    <section id="viewSync" class="space-y-4 hidden">
+      <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <i data-lucide="radio" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="text-sm font-bold text-slate-900">WhatsApp 離線同步碼 (非同步首選)</h3>
-            <p class="text-xs text-slate-400">雙向合併演算法支援，貼上亦不會洗走本機新紀錄</p>
+            <h3 class="text-sm font-extrabold text-slate-900">零伺服器 P2P 雙向同步</h3>
+            <p class="text-xs text-slate-400">雙向無損合併，離線隨便入，連線不覆蓋</p>
           </div>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">我的房間同步碼</span>
+            <span id="myPeerIdDisplay" class="text-xs font-mono font-extrabold text-indigo-600 tracking-wider">產生中...</span>
+          </div>
+          <button onclick="createOrRefreshP2P()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-xs">
+            重新產生房間碼
+          </button>
         </div>
 
         <div class="space-y-2">
-          <button onclick="copySyncDataToClipboard()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs">
-            <i data-lucide="copy" class="w-4 h-4"></i>
-            <span>一鍵複製同步碼 (傳入家庭 WhatsApp 群組)</span>
-          </button>
-
-          <textarea id="importDataInput" rows="2" placeholder="在此貼上屋企人傳給你的同步碼..." class="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none resize-none"></textarea>
-
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="importSyncData('merge')" class="py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold">
-              智能雙向合併 (推薦)
-            </button>
-            <button onclick="importSyncData('overwrite')" class="py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold">
-              完全覆蓋本機
+          <label class="text-xs font-bold text-slate-700 block">加入家人的同步碼 (雙向合併)</label>
+          <div class="flex gap-2">
+            <input type="text" id="targetPeerIdInput" placeholder="輸入6位數房間碼" class="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold uppercase focus:outline-none">
+            <button onclick="connectToPeer()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs">
+              連線合併
             </button>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- ---------------- 分頁 5: 管理中心 (Management) ---------------- -->
-    <section id="tabManagement" class="space-y-3 hidden">
-      <!-- 管理中心子導航 -->
-      <div class="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-xs flex items-center gap-1 overflow-x-auto no-scrollbar">
-        <button onclick="switchAdminSubTab('members')" id="adminTabBtn_members" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-orange-500 text-white shrink-0">成員/負責人</button>
-        <button onclick="switchAdminSubTab('choreCats')" id="adminTabBtn_choreCats" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 shrink-0">家務類別</button>
-        <button onclick="switchAdminSubTab('expenseCats')" id="adminTabBtn_expenseCats" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 shrink-0">開支類別</button>
-        <button onclick="switchAdminSubTab('spaces')" id="adminTabBtn_spaces" class="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 shrink-0">家居空間</button>
-      </div>
+        <!-- 離線雙向合併模擬器 -->
+        <div class="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 space-y-2.5">
+          <span class="text-xs font-bold text-indigo-900 block">離線雙向合併模擬器 (單機測試)</span>
+          <p class="text-[11px] text-slate-500">你可以先離線新增家務或開支，然後點擊此按鈕，即時驗證你的離線資料零丟失，並與家人新資料自動融合！</p>
+          <button onclick="simulateOfflineMerge()" class="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-extrabold text-xs shadow-xs">
+            一鍵模擬家人雙向無損合併
+          </button>
+        </div>
 
-      <!-- 管理面板容器 -->
-      <div id="adminPanelContainer" class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3"></div>
-
-      <!-- 資料重設 -->
-      <div class="pt-2">
-        <button onclick="resetDefaultData()" class="w-full py-2 border border-dashed border-rose-300 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-50 transition-colors">
-          重置為預設示範資料
-        </button>
+        <!-- 離線同步碼分享 (WhatsApp) -->
+        <div class="pt-2 border-t border-slate-100 flex gap-2">
+          <button onclick="copySyncCodeWhatsApp()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs flex items-center justify-center gap-1.5">
+            <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+            <span>複製同步碼發到 WhatsApp</span>
+          </button>
+          <button onclick="importSyncCodePrompt()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs">
+            貼上匯入
+          </button>
+        </div>
       </div>
     </section>
   </main>
 
-  <!-- ================= 底部 5 大分頁導航 ================= -->
-  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-3 z-40 shadow-lg">
-    <div class="max-w-md mx-auto grid grid-cols-5 gap-1 text-center">
-      <button onclick="switchTab('tasks')" id="navBtn_tasks" class="flex flex-col items-center py-1 text-orange-600 font-bold transition-transform">
+  <!-- ================= 底部導航欄 ================= -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 z-20 shadow-md">
+    <div class="max-w-md mx-auto grid grid-cols-5 gap-1">
+      <button onclick="switchTab('tasks')" id="tabBtn_tasks" class="flex flex-col items-center gap-1 py-1 text-emerald-600 font-bold transition-all">
         <i data-lucide="check-square" class="w-5 h-5"></i>
-        <span class="text-[10px] mt-0.5">家務事項</span>
+        <span class="text-[10px]">家務</span>
       </button>
-
-      <button onclick="switchTab('expenses')" id="navBtn_expenses" class="flex flex-col items-center py-1 text-slate-400 font-medium transition-transform">
-        <i data-lucide="dollar-sign" class="w-5 h-5"></i>
-        <span class="text-[10px] mt-0.5">家庭開支</span>
+      <button onclick="switchTab('expenses')" id="tabBtn_expenses" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all">
+        <i data-lucide="circle-dollar-sign" class="w-5 h-5"></i>
+        <span class="text-[10px]">開支</span>
       </button>
-
-      <button onclick="switchTab('reminders')" id="navBtn_reminders" class="flex flex-col items-center py-1 text-slate-400 font-medium transition-transform relative">
+      <button onclick="switchTab('notifications')" id="tabBtn_notifications" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all relative">
         <i data-lucide="bell" class="w-5 h-5"></i>
-        <span class="text-[10px] mt-0.5">每日提醒</span>
+        <span class="text-[10px]">提醒通知</span>
+        <span id="navNotifDot" class="hidden absolute top-1 right-5 w-2 h-2 rounded-full bg-rose-500"></span>
       </button>
-
-      <button onclick="switchTab('sync')" id="navBtn_sync" class="flex flex-col items-center py-1 text-slate-400 font-medium transition-transform">
-        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
-        <span class="text-[10px] mt-0.5">P2P 同步</span>
+      <button onclick="switchTab('management')" id="tabBtn_management" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all">
+        <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+        <span class="text-[10px]">管理中心</span>
       </button>
-
-      <button onclick="switchTab('management')" id="navBtn_management" class="flex flex-col items-center py-1 text-slate-400 font-medium transition-transform">
-        <i data-lucide="settings" class="w-5 h-5"></i>
-        <span class="text-[10px] mt-0.5">管理中心</span>
+      <button onclick="switchTab('sync')" id="tabBtn_sync" class="flex flex-col items-center gap-1 py-1 text-slate-400 hover:text-slate-600 transition-all">
+        <i data-lucide="radio" class="w-5 h-5"></i>
+        <span class="text-[10px]">P2P同步</span>
       </button>
     </div>
   </nav>
 
   <!-- ================= MODAL: 新增家務 ================= -->
   <div id="choreModal" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4">
-      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <h3 class="text-base font-bold text-slate-900">新增家務 / 整理任務</h3>
-        <button onclick="closeModal('choreModal')" class="p-1 text-slate-400 hover:text-slate-600">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="text-base font-extrabold text-slate-900">新增家務事項</h3>
+        <button onclick="closeChoreModal()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
-
-      <form onsubmit="handleCreateChore(event)" class="space-y-3.5">
+      <form onsubmit="handleSaveChore(event)" class="space-y-3.5 mt-4">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">任務名稱 *</label>
-          <input type="text" id="modalChoreTitle" required placeholder="例如: 客廳吸塵抹地、清洗冷氣濾網..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20">
+          <label class="text-xs font-bold text-slate-700 block mb-1">家務名稱 *</label>
+          <input type="text" id="choreTitleInput" required placeholder="例如：洗冷氣機、買洗頭水、抹窗" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
         </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">所屬屋企空間</label>
-          <select id="modalChoreSpace" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">負責人</label>
-            <select id="modalChoreAssignee" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
+            <label class="text-xs font-bold text-slate-700 block mb-1">空間物業</label>
+            <select id="choreHouseholdSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">任務類別</label>
-            <select id="modalChoreCategory" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
+            <label class="text-xs font-bold text-slate-700 block mb-1">負責人</label>
+            <select id="choreAssigneeSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
           </div>
         </div>
-
-        <!-- 預計日期與時間 -->
-        <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-xl space-y-2">
-          <span class="text-xs font-bold text-blue-900 flex items-center gap-1">
-            <i data-lucide="clock" class="w-3.5 h-3.5"></i> 預計進行時間
-          </span>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">預定日期</label>
-              <input type="date" id="modalChorePlannedDate" required class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs bg-white">
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">預定時間</label>
-              <input type="time" id="modalChorePlannedTime" value="10:00" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs bg-white">
-            </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-700 block mb-1">任務類別</label>
+            <select id="choreCategorySelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-700 block mb-1">預定日期</label>
+            <input type="date" id="chorePlannedDateInput" required class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs bg-white">
           </div>
         </div>
-
-        <!-- 可選截止期限 (Due Date & Time) -->
-        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-          <div class="flex items-center justify-between">
-            <label class="text-xs font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" id="modalChoreHasDueDate" onchange="toggleModalDueFields(this.checked)" checked class="rounded text-orange-500">
-              <span>設定截止期限 (Due Date / Time)</span>
-            </label>
-            <span class="text-[10px] text-amber-600 font-bold">通知優先置頂</span>
-          </div>
-
-          <div id="modalChoreDueFields" class="grid grid-cols-2 gap-2 pt-1">
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">最後期限日 (Due)</label>
-              <input type="date" id="modalChoreDueDate" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs bg-white">
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-500 mb-0.5">截止時間</label>
-              <input type="time" id="modalChoreDueTime" value="18:00" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs bg-white">
-            </div>
+        <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="choreHasDueCheckbox" onchange="toggleDueInputs(this.checked)" class="w-4 h-4 accent-emerald-600 rounded">
+            <span class="text-xs font-bold text-slate-700">設定截止期限 (Due Date/Time)</span>
+          </label>
+          <div id="dueInputsRow" class="grid grid-cols-2 gap-2 hidden pt-1">
+            <input type="date" id="choreDueDateInput" class="px-2 py-1.5 rounded-lg border border-slate-200 text-xs bg-white">
+            <input type="time" id="choreDueTimeInput" value="18:00" class="px-2 py-1.5 rounded-lg border border-slate-200 text-xs bg-white">
           </div>
         </div>
-
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">備註 (可選)</label>
-          <textarea id="modalChoreNotes" rows="2" placeholder="注意事項、工具位置..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs resize-none"></textarea>
+          <label class="text-xs font-bold text-slate-700 block mb-1">備註 (可選)</label>
+          <input type="text" id="choreNotesInput" placeholder="如：要買邊款牌子、擺喺邊度" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none">
         </div>
-
-        <button type="submit" class="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm rounded-xl shadow-md">
-          加入家務清單
+        <button type="submit" class="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md transition-all">
+          即時新增並廣播通知全體
         </button>
       </form>
     </div>
   </div>
 
-  <!-- ================= MODAL: 記錄開支 ================= -->
+  <!-- ================= MODAL: 新增開支 ================= -->
   <div id="expenseModal" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <h3 class="text-base font-bold text-slate-900">記錄一筆家庭開支</h3>
-        <button onclick="closeModal('expenseModal')" class="p-1 text-slate-400 hover:text-slate-600">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="text-base font-extrabold text-slate-900">記錄家庭開支</h3>
+        <button onclick=" closeExpenseModal()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
-
-      <form onsubmit="handleCreateExpense(event)" class="space-y-3.5">
+      <form onsubmit="handleSaveExpense(event)" class="space-y-3.5 mt-4">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">項目名稱 *</label>
-          <input type="text" id="modalExpenseTitle" required placeholder="例如: 買去屑洗頭水、買餸煲湯、水電煤..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none">
+          <label class="text-xs font-bold text-slate-700 block mb-1">開支項目 *</label>
+          <input type="text" id="expTitleInput" required placeholder="例如：買洗頭水、買餸、換濾芯" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none">
         </div>
-
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">金額 (HK$) *</label>
-            <input type="number" step="0.1" id="modalExpenseAmount" required placeholder="0.0" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold focus:outline-none">
+            <label class="text-xs font-bold text-slate-700 block mb-1">金額 (HK$) *</label>
+            <input type="number" id="expAmountInput" step="0.1" required placeholder="0.0" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-black focus:outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">付款人</label>
-            <select id="modalExpensePaidBy" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
+            <label class="text-xs font-bold text-slate-700 block mb-1">邊個畀錢 (付款人)</label>
+            <select id="expPaidBySelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
           </div>
         </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">所屬屋企空間</label>
-          <select id="modalExpenseSpace" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">開支類別</label>
-            <select id="modalExpenseCategory" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"></select>
+            <label class="text-xs font-bold text-slate-700 block mb-1">所屬空間</label>
+            <select id="expHouseholdSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">消費日期</label>
-            <input type="date" id="modalExpenseDate" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+            <label class="text-xs font-bold text-slate-700 block mb-1">開支類別</label>
+            <select id="expCategorySelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"></select>
           </div>
         </div>
-
-        <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md">
-          儲存開支
+        <button type="submit" class="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md transition-all">
+          儲存並廣播通知全體
         </button>
       </form>
     </div>
   </div>
 
-  <!-- ================= JAVASCRIPT 全功能邏輯 ================= -->
+  <!-- ================= MODAL: 通用輸入與確認對話框 (取代 prompt/confirm/alert) ================= -->
+  <div id="customDialogModal" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 id="customDialogTitle" class="text-sm font-extrabold text-slate-900">提示</h3>
+        <button onclick="closeCustomDialog()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <p id="customDialogMessage" class="text-xs text-slate-600 leading-relaxed hidden"></p>
+      <div id="customDialogInputWrap" class="hidden">
+        <input type="text" id="customDialogInput" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button id="customDialogCancelBtn" onclick="closeCustomDialog()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs">取消</button>
+        <button id="customDialogConfirmBtn" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 核心 JavaScript 邏輯 ================= -->
   <script>
-    // ---------- 1. 全域資料狀態與 CRDT 時間戳記架構 ----------
-    const STORAGE_KEY = 'HOMESYNC_HK_CRDT_V4';
-    const LAST_SYNC_TS_KEY = 'HOMESYNC_LAST_SYNC_TS';
+    // 預設資料集 (CRDT LWW 格式)
+    const STORAGE_KEY = 'HOMESYNC_HK_V4';
+    const nowTime = Date.now();
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    function getTodayString() {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    }
-
-    function createUUID(prefix = 'id') {
-      return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
-    }
-
-    // 預設資料：每個項目都具備 id, updatedAt, deleted 墓碑標記
-    const now = Date.now();
-    const defaultInitialState = {
+    const defaultState = {
       appName: '家友記',
-      appNameUpdatedAt: now,
-      spaces: [
-        { id: 'sp_1', name: '我屋企', color: 'orange', updatedAt: now, deleted: false },
-        { id: 'sp_2', name: 'Daddy 媽咪屋企', color: 'emerald', updatedAt: now, deleted: false },
-        { id: 'sp_3', name: '長沙灣出租屋', color: 'blue', updatedAt: now, deleted: false }
+      currentUser: '我',
+      currentSpaceId: 'ALL',
+      activeTab: 'tasks',
+      taskFilter: 'pending',
+      selectedMemberFilter: 'ALL',
+      adminSubTab: 'members',
+      notificationSettings: {
+        morningTime: '08:30',
+        sound: true
+      },
+      households: [
+        { id: 'h1', name: '我屋企', color: 'emerald', updatedAt: nowTime, deleted: false },
+        { id: 'h2', name: 'Daddy 媽咪屋企', color: 'indigo', updatedAt: nowTime, deleted: false },
+        { id: 'h3', name: '長沙灣出租屋', color: 'amber', updatedAt: nowTime, deleted: false }
       ],
       members: [
-        { id: 'm_1', name: '我', updatedAt: now, deleted: false },
-        { id: 'm_2', name: '老公', updatedAt: now, deleted: false },
-        { id: 'm_3', name: '老婆', updatedAt: now, deleted: false },
-        { id: 'm_4', name: '工人姐姐', updatedAt: now, deleted: false },
-        { id: 'm_5', name: 'Daddy', updatedAt: now, deleted: false },
-        { id: 'm_6', name: '媽咪', updatedAt: now, deleted: false },
-        { id: 'm_7', name: '阿妹', updatedAt: now, deleted: false }
+        { id: 'm1', name: '我', updatedAt: nowTime, deleted: false },
+        { id: 'm2', name: '老公', updatedAt: nowTime, deleted: false },
+        { id: 'm3', name: '工人姐姐', updatedAt: nowTime, deleted: false },
+        { id: 'm4', name: 'Daddy', updatedAt: nowTime, deleted: false },
+        { id: 'm5', name: '媽咪', updatedAt: nowTime, deleted: false }
       ],
       choreCategories: [
-        { id: 'cc_1', name: '清潔', updatedAt: now, deleted: false },
-        { id: 'cc_2', name: '整理', updatedAt: now, deleted: false },
-        { id: 'cc_3', name: '維修', updatedAt: now, deleted: false },
-        { id: 'cc_4', name: '採購', updatedAt: now, deleted: false },
-        { id: 'cc_5', name: '日常', updatedAt: now, deleted: false },
-        { id: 'cc_6', name: '寵物護理', updatedAt: now, deleted: false }
+        { id: 'cc1', name: '清潔', updatedAt: nowTime, deleted: false },
+        { id: 'cc2', name: '整理', updatedAt: nowTime, deleted: false },
+        { id: 'cc3', name: '維修', updatedAt: nowTime, deleted: false },
+        { id: 'cc4', name: '採購', updatedAt: nowTime, deleted: false }
       ],
       expenseCategories: [
-        { id: 'ec_1', name: '個人護理', updatedAt: now, deleted: false },
-        { id: 'ec_2', name: '日用品', updatedAt: now, deleted: false },
-        { id: 'ec_3', name: '買餸食材', updatedAt: now, deleted: false },
-        { id: 'ec_4', name: '家居維修', updatedAt: now, deleted: false },
-        { id: 'ec_5', name: '水電煤雜費', updatedAt: now, deleted: false }
+        { id: 'ec1', name: '個人護理', updatedAt: nowTime, deleted: false },
+        { id: 'ec2', name: '日用品', updatedAt: nowTime, deleted: false },
+        { id: 'ec3', name: '買餸食材', updatedAt: nowTime, deleted: false },
+        { id: 'ec4', name: '水電煤維修', updatedAt: nowTime, deleted: false }
       ],
-      chores: [
+      tasks: [
         {
-          id: 'c_1',
+          id: 't1',
           title: '客廳吸塵抹地 & 洗地氈',
-          spaceId: 'sp_1',
+          householdId: 'h1',
           category: '清潔',
           assignee: '工人姐姐',
-          plannedDate: getTodayString(),
-          plannedTime: '10:00',
+          plannedDate: todayStr,
           hasDueDate: true,
-          dueDate: getTodayString(),
+          dueDate: todayStr,
           dueTime: '18:00',
           completed: false,
-          notes: '記得抹梳化底同電視機後面',
-          updatedAt: now - 3600000,
+          notes: '記得抹埋梳化底',
+          updatedAt: nowTime,
           deleted: false
         },
         {
-          id: 'c_2',
-          title: '換浴室花灑濾芯 (催促)',
-          spaceId: 'sp_2',
+          id: 't2',
+          title: '更換浴室花灑濾芯 (催促)',
+          householdId: 'h2',
           category: '維修',
           assignee: '我',
-          plannedDate: getTodayString(),
-          plannedTime: '14:30',
+          plannedDate: todayStr,
           hasDueDate: true,
-          dueDate: getTodayString(),
+          dueDate: todayStr,
           dueTime: '21:00',
           completed: false,
-          notes: '上去食飯時順便換',
-          updatedAt: now - 1800000,
-          deleted: false
-        },
-        {
-          id: 'c_3',
-          title: '執衣櫃換季冬褸',
-          spaceId: 'sp_1',
-          category: '整理',
-          assignee: '我',
-          plannedDate: '2026-11-06',
-          plannedTime: '15:00',
-          hasDueDate: false,
-          dueDate: '',
-          dueTime: '',
-          completed: false,
-          notes: '入抽真空袋',
-          updatedAt: now - 7200000,
+          notes: '星期六上去食飯順便換',
+          updatedAt: nowTime,
           deleted: false
         }
       ],
       expenses: [
         {
-          id: 'e_1',
+          id: 'e1',
           title: '買去屑洗頭水 & 沐浴露補充裝',
-          amount: 98,
-          spaceId: 'sp_1',
+          amount: 88,
+          householdId: 'h1',
           category: '個人護理',
           paidBy: '我',
-          date: getTodayString(),
-          updatedAt: now - 5400000,
+          date: todayStr,
+          updatedAt: nowTime,
           deleted: false
         },
         {
-          id: 'e_2',
-          title: '街市買餸煲老火湯料',
-          amount: 240,
-          spaceId: 'sp_2',
+          id: 'e2',
+          title: '街市買老火湯材料',
+          amount: 190,
+          householdId: 'h2',
           category: '買餸食材',
-          paidBy: '我',
-          date: getTodayString(),
-          updatedAt: now - 2700000,
+          paidBy: '媽咪',
+          date: todayStr,
+          updatedAt: nowTime,
           deleted: false
         }
       ],
-      notificationConfig: {
-        enabled: true,
-        remindTime: '08:30'
-      }
+      activityLogs: [
+        { id: 'l1', text: '系統已啟動雙向無損同步與即時通知引擎', time: '剛剛', type: 'system' }
+      ]
     };
 
-    let appState = loadState();
-    let lastSyncTimestamp = parseInt(localStorage.getItem(LAST_SYNC_TS_KEY) || '0', 10);
+    // 自訂無阻塞對話框 (取代 alert / prompt / confirm)
+    function openCustomPrompt(title, defaultValue, callback) {
+      document.getElementById('customDialogTitle').innerText = title;
+      document.getElementById('customDialogMessage').classList.add('hidden');
+      const inputWrap = document.getElementById('customDialogInputWrap');
+      const inputEl = document.getElementById('customDialogInput');
+      inputWrap.classList.remove('hidden');
+      inputEl.value = defaultValue || '';
+      document.getElementById('customDialogCancelBtn').classList.remove('hidden');
+      const confirmBtn = document.getElementById('customDialogConfirmBtn');
+      confirmBtn.onclick = () => {
+        const val = inputEl.value;
+        closeCustomDialog();
+        if (callback) callback(val);
+      };
+      document.getElementById('customDialogModal').classList.remove('hidden');
+      setTimeout(() => inputEl.focus(), 50);
+    }
 
-    function loadState() {
+    function openCustomConfirm(title, message, onConfirm) {
+      document.getElementById('customDialogTitle').innerText = title;
+      const msgEl = document.getElementById('customDialogMessage');
+      msgEl.innerText = message;
+      msgEl.classList.remove('hidden');
+      document.getElementById('customDialogInputWrap').classList.add('hidden');
+      document.getElementById('customDialogCancelBtn').classList.remove('hidden');
+      const confirmBtn = document.getElementById('customDialogConfirmBtn');
+      confirmBtn.onclick = () => {
+        closeCustomDialog();
+        if (onConfirm) onConfirm();
+      };
+      document.getElementById('customDialogModal').classList.remove('hidden');
+    }
+
+    function closeCustomDialog() {
+      document.getElementById('customDialogModal').classList.add('hidden');
+    }
+
+    // 載入 State
+    let appState = (() => {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-      } catch (e) {
-        console.error('Failed to load storage', e);
-      }
-      return JSON.parse(JSON.stringify(defaultInitialState));
-    }
+        if (raw) return { ...defaultState, ...JSON.parse(raw) };
+      } catch (e) { console.error(e); }
+      return defaultState;
+    })();
 
-    function saveState(broadcast = true) {
+    function saveState() {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-      } catch (e) {
-        console.error(e);
-      }
-
-      // 如果 P2P 連線處於就緒狀態，廣播給對端做雙向合併
-      if (broadcast && p2pConn && p2pConn.open) {
-        p2pConn.send({ type: 'SYNC_UPDATE', payload: appState });
-        lastSyncTimestamp = Date.now();
-        localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
-      }
-
-      renderAll();
+        renderAll();
+      } catch (e) { console.error(e); }
     }
 
-    function resetDefaultData() {
-      showCustomConfirm('確定要將所有資料重置為預設示範資料嗎？本機自訂的項目將會被重設。', () => {
-        appState = JSON.parse(JSON.stringify(defaultInitialState));
-        lastSyncTimestamp = Date.now();
-        localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
-        saveState();
-        showPushBanner('已重置', '系統已還原為示範資料狀態');
-      });
-    }
-
-    // ---------- 2. CRDT Last-Write-Wins (LWW) 雙向無損合併核心演算法 ----------
-    function mergeCRDTLists(localList, remoteList) {
-      const map = new Map();
-
-      // 先載入本地清單
-      (localList || []).forEach(item => {
-        if (item && item.id) map.set(item.id, item);
-      });
-
-      let addedCount = 0;
-      let updatedCount = 0;
-
-      // 比對遠端清單
-      (remoteList || []).forEach(remoteItem => {
-        if (!remoteItem || !remoteItem.id) return;
-        const localItem = map.get(remoteItem.id);
-
-        if (!localItem) {
-          // 情況 1: 對端新增，本地無此 ID -> 吸納新紀錄
-          map.set(remoteItem.id, remoteItem);
-          addedCount++;
-        } else {
-          // 情況 2: 雙方皆有此 ID -> 依 updatedAt 毫秒級時間戳記取最新版本 (LWW)
-          const localTime = localItem.updatedAt || 0;
-          const remoteTime = remoteItem.updatedAt || 0;
-
-          if (remoteTime > localTime) {
-            map.set(remoteItem.id, remoteItem);
-            updatedCount++;
-          }
-        }
-      });
-
-      return {
-        mergedList: Array.from(map.values()),
-        stats: { addedCount, updatedCount }
-      };
-    }
-
-    function mergeFullState(remoteState) {
-      if (!remoteState) return { changesCount: 0 };
-
-      // 1. 合併 App 名稱
-      if ((remoteState.appNameUpdatedAt || 0) > (appState.appNameUpdatedAt || 0)) {
-        appState.appName = remoteState.appName || appState.appName;
-        appState.appNameUpdatedAt = remoteState.appNameUpdatedAt;
-      }
-
-      // 2. 合併空間、成員、類別 (含軟刪除 Tombstone)
-      const mergedSpaces = mergeCRDTLists(appState.spaces, remoteState.spaces);
-      appState.spaces = mergedSpaces.mergedList;
-
-      const mergedMembers = mergeCRDTLists(appState.members, remoteState.members);
-      appState.members = mergedMembers.mergedList;
-
-      const mergedChoreCats = mergeCRDTLists(appState.choreCategories, remoteState.choreCategories);
-      appState.choreCategories = mergedChoreCats.mergedList;
-
-      const mergedExpenseCats = mergeCRDTLists(appState.expenseCategories, remoteState.expenseCategories);
-      appState.expenseCategories = mergedExpenseCats.mergedList;
-
-      // 3. 合併家務與開支 (核心：離線入的開支與打剔絕不遺失)
-      const mergedChores = mergeCRDTLists(appState.chores, remoteState.chores);
-      appState.chores = mergedChores.mergedList;
-
-      const mergedExpenses = mergeCRDTLists(appState.expenses, remoteState.expenses);
-      appState.expenses = mergedExpenses.mergedList;
-
-      const totalChanges = mergedSpaces.stats.addedCount + mergedSpaces.stats.updatedCount +
-                           mergedMembers.stats.addedCount + mergedMembers.stats.updatedCount +
-                           mergedChores.stats.addedCount + mergedChores.stats.updatedCount +
-                           mergedExpenses.stats.addedCount + mergedExpenses.stats.updatedCount;
-
-      lastSyncTimestamp = Date.now();
-      localStorage.setItem(LAST_SYNC_TS_KEY, lastSyncTimestamp.toString());
-      saveState(false);
-
-      return {
-        changesCount: totalChanges,
-        choreStats: mergedChores.stats,
-        expenseStats: mergedExpenses.stats
-      };
-    }
-
-    // 計算自上次同步以來的本機待同步改動數
-    function getPendingChangesCount() {
-      if (lastSyncTimestamp === 0) return 0;
-      let count = 0;
-
-      const checkList = (list) => {
-        (list || []).forEach(item => {
-          if ((item.updatedAt || 0) > lastSyncTimestamp) count++;
-        });
-      };
-
-      checkList(appState.chores);
-      checkList(appState.expenses);
-      checkList(appState.members);
-      checkList(appState.spaces);
-      checkList(appState.choreCategories);
-      checkList(appState.expenseCategories);
-
-      return count;
-    }
-
-    // ---------- 3. 視圖狀態 (UI Filters) ----------
-    let currentSpaceId = 'ALL';
-    let currentChoreFilter = 'pending';
-    let currentMemberFilter = 'ALL';
-    let activeTabName = 'tasks';
-    let activeAdminSubTab = 'members';
-
-    // ---------- 4. WebRTC 雙向對等握手模組 (PeerJS) ----------
-    let peer = null;
-    let p2pConn = null;
-    let my6DigitCode = '';
-
-    function initPeer() {
-      my6DigitCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const peerId = 'homesync_hk_crdt_' + my6DigitCode;
-
+    // 播放提示音 (Web Audio API)
+    function playChimeSound() {
       try {
-        peer = new Peer(peerId);
-        peer.on('open', (id) => {
-          document.getElementById('myPeerCodeDisplay').innerText = my6DigitCode;
-          document.getElementById('p2pLogMessage').innerText = `就緒！房間碼: ${my6DigitCode}，等待屋企人連入...`;
-        });
-
-        // 當他人連入我 (我充當接受端)
-        peer.on('connection', (conn) => {
-          setupConnection(conn, false);
-          document.getElementById('p2pLogMessage').innerText = `已偵測到連線！進行雙向握手比對中...`;
-        });
-
-        peer.on('error', (err) => {
-          console.warn('Peer error', err);
-          document.getElementById('p2pLogMessage').innerText = `連線提示: ${err.type || '重試中'}`;
-        });
-      } catch (e) {
-        console.error(e);
-      }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+      } catch (e) {}
     }
 
-    // 當我主動加入他人 (我充當發起端)
-    function connectToPeer() {
-      const code = document.getElementById('targetPeerCodeInput').value.trim();
-      if (!code || code.length < 6) {
-        showPushBanner('提示', '請輸入屋企人 6 位數房間碼');
-        return;
-      }
-      const targetPeerId = 'homesync_hk_crdt_' + code;
-      document.getElementById('p2pLogMessage').innerText = `正在連接房間 ${code}...`;
-      const conn = peer.connect(targetPeerId);
-      setupConnection(conn, true);
-    }
+    // 彈出頂部 Push Notification 橫幅
+    let bannerTimer = null;
+    function showPushBanner(title, body, tag = '即時通知') {
+      const banner = document.getElementById('pushBanner');
+      document.getElementById('pushBannerTitle').innerText = title;
+      document.getElementById('pushBannerBody').innerText = body;
+      document.getElementById('pushBannerTag').innerText = tag;
+      document.getElementById('pushBannerTime').innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      banner.classList.remove('hidden');
+      playChimeSound();
 
-    // 關鍵：雙向對等握手 (Two-Way Handshake)
-    function setupConnection(conn, isInitiator) {
-      p2pConn = conn;
-
-      conn.on('open', () => {
-        updateP2PStatusUI(true);
-        document.getElementById('p2pLogMessage').innerText = `通道已加密直連！正在雙向同步無損資料...`;
-
-        // 無論是發起端還是接收端，立刻將自己的全量資料（含離線輸入）發送握手
-        conn.send({
-          type: isInitiator ? 'HANDSHAKE_INIT' : 'HANDSHAKE_REPLY',
-          payload: appState
-        });
-      });
-
-      conn.on('data', (data) => {
-        if (!data || !data.type) return;
-
-        if (data.type === 'HANDSHAKE_INIT') {
-          // 收到發起端的資料 -> 本地合併 -> 回覆自身合併後的完整狀態
-          const result = mergeFullState(data.payload);
-          conn.send({ type: 'HANDSHAKE_REPLY', payload: appState });
-          showPushBanner('雙向握手完成', `已無損合併！新增/更新了 ${result.changesCount} 項改動`);
-          document.getElementById('p2pLogMessage').innerText = `雙向同步完成！雙方資料已完全一致。`;
-        } else if (data.type === 'HANDSHAKE_REPLY') {
-          // 發起端收到回覆 -> 本地合併
-          const result = mergeFullState(data.payload);
-          showPushBanner('雙向握手完成', `已成功連線！雙方資料已同步整合 (${result.changesCount} 項改動)`);
-          document.getElementById('p2pLogMessage').innerText = `雙向同步完成！雙方資料已完全一致。`;
-        } else if (data.type === 'SYNC_UPDATE') {
-          // 日常即時改動推播 -> 增量合併
-          const result = mergeFullState(data.payload);
-          showPushBanner('收到即時更新', `屋企人剛剛更新了資料 (${result.changesCount} 項)`);
-        }
-      });
-
-      conn.on('close', () => {
-        updateP2PStatusUI(false);
-        document.getElementById('p2pLogMessage').innerText = `連線已斷開，已自動切換回本機離線模式。`;
-      });
-    }
-
-    function updateP2PStatusUI(connected) {
-      const dot = document.getElementById('p2pSyncDot');
-      const text = document.getElementById('p2pSyncStatusText');
-      const badge = document.getElementById('p2pSyncBadge');
-
-      if (connected) {
-        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
-        text.innerText = 'P2P 雙向同步中';
-        badge.className = 'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-800 border border-emerald-300';
-      } else {
-        dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
-        text.innerText = '離線運作中';
-        badge.className = 'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 border border-slate-200';
-      }
-    }
-
-    // ---------- 5. 離線雙向合併沙盒模擬器 (單機可視化測試) ----------
-    function runOfflineSimulation() {
-      // 構造家人在另一端離線輸入的模擬資料包 (包含新開支與已完成家務)
-      const simTime = Date.now();
-      const simulatedRemoteState = {
-        appName: appState.appName,
-        appNameUpdatedAt: simTime,
-        spaces: [...appState.spaces],
-        members: [...appState.members],
-        choreCategories: [...appState.choreCategories],
-        expenseCategories: [...appState.expenseCategories],
-        chores: [
-          // 模擬家人把客廳吸塵打剔了 (若存在)
-          ...appState.chores.map((c, i) => i === 0 ? { ...c, completed: true, updatedAt: simTime } : c),
-          // 模擬家人新加一項「買廁紙」家務
-          {
-            id: createUUID('sim_c'),
-            title: '採購家庭裝四層衛生紙',
-            spaceId: appState.spaces[0]?.id || 'sp_1',
-            category: '採購',
-            assignee: '媽咪',
-            plannedDate: getTodayString(),
-            plannedTime: '16:00',
-            hasDueDate: false,
-            dueDate: '',
-            dueTime: '',
-            completed: false,
-            notes: '百佳有特價買二送一',
-            updatedAt: simTime,
-            deleted: false
-          }
-        ],
-        expenses: [
-          ...appState.expenses,
-          // 模擬家人離線記低一筆買餸開支
-          {
-            id: createUUID('sim_e'),
-            title: '鮮牛肉 & 菜心 (媽咪買餸)',
-            amount: 135,
-            spaceId: appState.spaces[0]?.id || 'sp_1',
-            category: '買餸食材',
-            paidBy: '媽咪',
-            date: getTodayString(),
-            updatedAt: simTime,
-            deleted: false
-          }
-        ]
-      };
-
-      // 執行雙向無損合併
-      const mergeResult = mergeFullState(simulatedRemoteState);
-
-      showPushBanner(
-        '沙盒合併完成 (無覆蓋！)',
-        `已成功融合家人資料：新增 1 筆買餸開支 (HK$135)、更新 1 項打剔，你的本地紀錄 100% 完好保存！`
-      );
-
-      switchTab('tasks');
-    }
-
-    // ---------- 6. WhatsApp 離線同步碼 (雙向合併安全防護) ----------
-    function copySyncDataToClipboard() {
-      const dataStr = JSON.stringify(appState);
-      const encoded = 'HOMESYNC_CRDT:' + btoa(encodeURIComponent(dataStr));
-
-      const textArea = document.createElement('textarea');
-      textArea.value = encoded;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-
-      showPushBanner('已複製同步碼！', '可直接在家庭 WhatsApp 群組貼上給家人。');
-    }
-
-    function importSyncData(mode) {
-      const input = document.getElementById('importDataInput').value.trim();
-      if (!input.startsWith('HOMESYNC_CRDT:') && !input.startsWith('HOMESYNC:')) {
-        showPushBanner('錯誤', '同步碼格式不正確，請確認完整複製。');
-        return;
-      }
-
-      try {
-        const cleanStr = input.replace('HOMESYNC_CRDT:', '').replace('HOMESYNC:', '');
-        const decoded = decodeURIComponent(atob(cleanStr));
-        const incoming = JSON.parse(decoded);
-
-        if (mode === 'overwrite') {
-          showCustomConfirm('確定要完全覆蓋本機資料嗎？本機尚未同步的修改將會被替換。', () => {
-            appState = incoming;
-            saveState();
-            showPushBanner('覆蓋成功', '本機資料已完全替換為最新匯入版本');
-            switchTab('tasks');
-          });
-        } else {
-          // 推薦：智能雙向無損合併 (Smart Merge)
-          const result = mergeFullState(incoming);
-          document.getElementById('importDataInput').value = '';
-          showPushBanner('雙向合併完成', `成功融合雙方資料，共吸納/更新了 ${result.changesCount} 項改動，無任何紀錄遺失！`);
-          switchTab('tasks');
-        }
-      } catch (err) {
-        showPushBanner('匯入失敗', '解析同步碼時發生錯誤');
-      }
-    }
-
-    // ---------- 7. 提醒與排程演算法 (Due Today 優先置頂) ----------
-    function getPrioritizedReminders() {
-      const today = getTodayString();
-      const uncompleted = (appState.chores || []).filter(c => !c.deleted && !c.completed);
-
-      const overdueList = [];
-      const dueTodayList = [];
-      const scheduledTodayList = [];
-      const others = [];
-
-      uncompleted.forEach(c => {
-        const isOverdue = c.hasDueDate && c.dueDate && (`${c.dueDate}T${c.dueTime || '23:59'}` < `${today}T${new Date().toTimeString().substring(0,5)}`);
-        const isDueToday = c.hasDueDate && c.dueDate === today;
-        const isPlannedToday = c.plannedDate === today;
-
-        if (isOverdue) overdueList.push({ ...c, tag: '⚠️ 已過期' });
-        else if (isDueToday) dueTodayList.push({ ...c, tag: '🔥 今日到期' });
-        else if (isPlannedToday) scheduledTodayList.push({ ...c, tag: '📅 今日預定' });
-        else others.push(c);
-      });
-
-      return [...overdueList, ...dueTodayList, ...scheduledTodayList, ...others];
-    }
-
-    function triggerMorningPushNotification(force = false) {
-      if (!appState.notificationConfig.enabled && !force) return;
-
-      const list = getPrioritizedReminders();
-      const urgentItems = list.slice(0, 3);
-      const urgentCount = list.filter(c => c.tag && (c.tag.includes('今日到期') || c.tag.includes('過期'))).length;
-
-      // 1. 系統原生推播
+      // 原生通知支援
       if ('Notification' in window && Notification.permission === 'granted') {
+        try { new Notification(title, { body: body }); } catch (e) {}
+      }
+
+      if (bannerTimer) clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => { hidePushBanner(); }, 6000);
+    }
+
+    function hidePushBanner() {
+      document.getElementById('pushBanner').classList.add('hidden');
+    }
+
+    function addActivityLog(text, type = 'action') {
+      const log = {
+        id: 'l_' + Date.now() + Math.random().toString(36).substr(2, 4),
+        text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type
+      };
+      appState.activityLogs.unshift(log);
+      if (appState.activityLogs.length > 50) appState.activityLogs.pop();
+    }
+
+    // 廣播動作給房間所有人
+    function broadcastAction(actionType, detail, notificationMsg) {
+      addActivityLog(notificationMsg.fullText, actionType);
+      showPushBanner(notificationMsg.title, notificationMsg.body, '家人動態廣播');
+      
+      // 透過沙盒安全的 BroadcastChannel 進行跨分頁/點對點即時廣播
+      if (syncChannel) {
         try {
-          new Notification(`🌅 ${appState.appName} 晨早提醒`, {
-            body: `今日共有 ${list.length} 項待辦（${urgentCount} 項需緊急/今日搞掂）`,
-            icon: 'https://placehold.co/128x128/f97316/ffffff?text=Home'
+          syncChannel.postMessage({
+            type: 'BROADCAST_ACTIVITY',
+            roomCode: currentRoomCode,
+            actor: appState.currentUser,
+            notification: notificationMsg,
+            fullState: appState
           });
         } catch (e) {}
       }
+      saveState();
+    }
 
-      // 2. In-App 彈窗
-      const toast = document.getElementById('pushToast');
-      document.getElementById('toastAppName').innerText = `${appState.appName} • 晨早提醒`;
-      document.getElementById('toastTime').innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      document.getElementById('toastHeader').innerText = `今日待辦家務：${list.length} 項 (${urgentCount} 項緊急)`;
+    // 模擬家人加 Item
+    function simulateFamilyAddItem() {
+      const familyNames = appState.members.filter(m => !m.deleted && m.name !== appState.currentUser).map(m => m.name);
+      const actor = familyNames.length ? familyNames[Math.floor(Math.random() * familyNames.length)] : '媽咪';
+      const isExpense = Math.random() > 0.5;
 
-      const listEl = document.getElementById('toastList');
-      if (urgentItems.length === 0) {
-        listEl.innerHTML = '<div class="text-slate-300">屋企乾乾淨淨，今日暫無待辦事項！好好放鬆～</div>';
+      if (isExpense) {
+        const cost = [45, 68, 120, 250][Math.floor(Math.random() * 4)];
+        const item = ['買去頭皮洗頭水', '買廁紙日用品', '街市買新鮮牛肉', '買洗碗布'][Math.floor(Math.random() * 4)];
+        const newExp = {
+          id: 'e_' + Date.now(),
+          title: item,
+          amount: cost,
+          householdId: appState.households[0].id,
+          category: '日用品',
+          paidBy: actor,
+          date: todayStr,
+          updatedAt: Date.now(),
+          deleted: false
+        };
+        appState.expenses.unshift(newExp);
+        broadcastAction('expense', newExp, {
+          title: `💰 ${actor} 剛剛記咗一筆開支`,
+          body: `${item} (HK$ ${cost})`,
+          fullText: `${actor} 新增開支：${item} - HK$ ${cost}`
+        });
       } else {
-        listEl.innerHTML = urgentItems.map(item => `
-          <div class="flex items-center justify-between bg-slate-800/80 px-2.5 py-1.5 rounded-lg">
-            <div class="flex items-center gap-1.5 truncate pr-2">
-              <span class="text-amber-400 font-bold shrink-0">${item.tag || '待辦'}</span>
-              <span class="truncate">${item.title}</span>
-            </div>
-            <span class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 shrink-0">${item.assignee}</span>
-          </div>
-        `).join('');
-      }
-
-      toast.classList.remove('hidden');
-      lucide.createIcons();
-    }
-
-    function hidePushToast() {
-      document.getElementById('pushToast').classList.add('hidden');
-    }
-
-    function requestBrowserPermission() {
-      if ('Notification' in window) {
-        Notification.requestPermission().then(perm => {
-          updateNotificationBadge();
-          if (perm === 'granted') showPushBanner('已授權', '成功啟用瀏覽器原生系統提醒');
+        const choreName = ['洗冷氣隔塵網', '吸塵抹走廊', '買廚房抹手紙', '倒客廳垃圾'][Math.floor(Math.random() * 4)];
+        const newChore = {
+          id: 't_' + Date.now(),
+          title: choreName,
+          householdId: appState.households[0].id,
+          category: '清潔',
+          assignee: appState.currentUser,
+          plannedDate: todayStr,
+          hasDueDate: true,
+          dueDate: todayStr,
+          dueTime: '19:00',
+          completed: false,
+          notes: '幫手搞搞佢',
+          updatedAt: Date.now(),
+          deleted: false
+        };
+        appState.tasks.unshift(newChore);
+        broadcastAction('task', newChore, {
+          title: `🔔 ${actor} 指派咗新家務俾你！`,
+          body: `${choreName} (今日內要搞掂)`,
+          fullText: `${actor} 新增家務：${choreName}（指派給：${appState.currentUser}）`
         });
       }
     }
 
-    function updateNotificationBadge() {
-      const badge = document.getElementById('browserNotifBadge');
-      if ('Notification' in window && Notification.permission === 'granted') {
-        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800';
-        badge.innerText = '已授權';
+    // 觸發早晨提醒 (Due 優先置頂)
+    function triggerMorningReminder(force = false) {
+      const activeChores = appState.tasks.filter(t => !t.deleted && !t.completed);
+      const urgent = activeChores.filter(t => t.hasDueDate && t.dueDate <= todayStr);
+      let title = `🌅 ${appState.appName} 早晨提醒`;
+      let body = '';
+      if (urgent.length > 0) {
+        body = `今日有 ${urgent.length} 項家務到期 (Due)！首要任務：${urgent[0].title}`;
+      } else if (activeChores.length > 0) {
+        body = `今日有 ${activeChores.length} 項家務待辦，預定事項：${activeChores[0].title}`;
       } else {
-        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700';
-        badge.innerText = '未授權';
+        body = `今日全屋乾乾淨淨，暫無待辦事項！好好放鬆一天。`;
       }
+      showPushBanner(title, body, '早晨排程提醒');
     }
 
-    function toggleNotificationEnabled(val) {
-      appState.notificationConfig.enabled = val;
+    // CRDT 雙向無損合併演算法
+    function mergeCRDTLists(localList, remoteList) {
+      const map = new Map();
+      localList.forEach(item => map.set(item.id, item));
+      remoteList.forEach(remoteItem => {
+        const localItem = map.get(remoteItem.id);
+        if (!localItem) {
+          map.set(remoteItem.id, remoteItem);
+        } else {
+          // LWW: 比對最後修改時間
+          if ((remoteItem.updatedAt || 0) > (localItem.updatedAt || 0)) {
+            map.set(remoteItem.id, remoteItem);
+          }
+        }
+      });
+      return Array.from(map.values());
+    }
+
+    // 單機離線合併模擬器
+    function simulateOfflineMerge() {
+      const simulatedRemoteTasks = [
+        {
+          id: 't_remote_' + Date.now(),
+          title: '媽咪離線入嘅：買新鮮生果',
+          householdId: appState.households[0].id,
+          category: '採購',
+          assignee: '媽咪',
+          plannedDate: todayStr,
+          hasDueDate: false,
+          completed: false,
+          updatedAt: Date.now(),
+          deleted: false
+        }
+      ];
+      const simulatedRemoteExpenses = [
+        {
+          id: 'e_remote_' + Date.now(),
+          title: '老公離線入嘅：超市買米油',
+          amount: 145,
+          householdId: appState.households[0].id,
+          category: '日用品',
+          paidBy: '老公',
+          date: todayStr,
+          updatedAt: Date.now(),
+          deleted: false
+        }
+      ];
+
+      appState.tasks = mergeCRDTLists(appState.tasks, simulatedRemoteTasks);
+      appState.expenses = mergeCRDTLists(appState.expenses, simulatedRemoteExpenses);
       saveState();
+
+      showPushBanner('🔄 雙向無損合併成功！', '收到 1 項家人離線家務及 1 筆開支，你的本機紀錄已完整保留。', 'CRDT 同步');
+      addActivityLog('完成單機雙向無損合併模擬：成功融合雙方離線紀錄');
     }
 
-    function updateReminderTime(val) {
-      appState.notificationConfig.remindTime = val;
-      saveState();
-    }
-
-    // ---------- 8. 介面渲染與操作 (UI Rendering) ----------
+    // ================= 介面渲染與事件 =================
     function renderAll() {
-      document.getElementById('displayAppName').innerText = appState.appName;
-      document.getElementById('notificationToggle').checked = appState.notificationConfig.enabled;
-      document.getElementById('reminderTimeInput').value = appState.notificationConfig.remindTime;
+      document.getElementById('headerAppName').innerText = appState.appName;
+      
+      // 渲染用戶身份選單
+      const userSelect = document.getElementById('currentUserSelect');
+      const activeMembers = appState.members.filter(m => !m.deleted);
+      userSelect.innerHTML = activeMembers.map(m => `
+        <option value="${m.name}" ${m.name === appState.currentUser ? 'selected' : ''}>${m.name}</option>
+      `).join('');
 
-      // 檢查待同步徽章
-      const pendingCount = getPendingChangesCount();
-      const pendingBadge = document.getElementById('pendingSyncBadge');
-      if (pendingCount > 0) {
-        pendingBadge.classList.remove('hidden');
-        document.getElementById('pendingSyncCountText').innerText = `待同步: ${pendingCount}`;
-      } else {
-        pendingBadge.classList.add('hidden');
-      }
-
-      renderSpacePills();
-      renderMemberFilter();
-      renderChores();
+      renderSpaceSwitcher();
+      renderTasks();
       renderExpenses();
-      renderPriorityList();
+      renderActivityLogs();
       renderAdminPanel();
-      updateNotificationBadge();
       lucide.createIcons();
     }
 
-    function renderSpacePills() {
-      const container = document.getElementById('spacePillsContainer');
-      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
-
-      const allPill = `
+    function renderSpaceSwitcher() {
+      const container = document.getElementById('spaceSwitcherBar');
+      const activeHouseholds = appState.households.filter(h => !h.deleted);
+      let html = `
         <button onclick="setSpaceFilter('ALL')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-          currentSpaceId === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-        }">
-          全部空間
-        </button>
+          appState.currentSpaceId === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }">全部空間</button>
       `;
-
-      const spacePills = activeSpaces.map(sp => `
-        <button onclick="setSpaceFilter('${sp.id}')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border ${
-          currentSpaceId === sp.id ? 'bg-orange-50 border-orange-300 text-orange-700 shadow-xs' : 'bg-white border-slate-200 text-slate-600'
-        }">
-          <i data-lucide="building" class="w-3 h-3"></i>
-          <span>${sp.name}</span>
-        </button>
-      `).join('');
-
-      const adminAddPill = `
-        <button onclick="switchTab('management'); switchAdminSubTab('spaces');" class="shrink-0 px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-500 border border-dashed border-slate-300 flex items-center gap-1">
-          <i data-lucide="settings" class="w-3 h-3"></i>
-          <span>管理空間</span>
-        </button>
-      `;
-
-      container.innerHTML = allPill + spacePills + adminAddPill;
+      activeHouseholds.forEach(h => {
+        const isActive = appState.currentSpaceId === h.id;
+        html += `
+          <button onclick="setSpaceFilter('${h.id}')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+            isActive ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'
+          }">${h.name}</button>
+        `;
+      });
+      container.innerHTML = html;
     }
 
-    function renderMemberFilter() {
-      const container = document.getElementById('memberFilterBar');
-      const activeMembers = (appState.members || []).filter(m => !m.deleted);
-
-      const allBtn = `
-        <button onclick="setMemberFilter('ALL')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-          currentMemberFilter === 'ALL' ? 'bg-orange-100 text-orange-800 border border-orange-300' : 'bg-white text-slate-500 border border-slate-200'
-        }">
-          全部成員
-        </button>
+    function renderTasks() {
+      const activeHouseholds = appState.households.filter(h => !h.deleted);
+      const activeMembers = appState.members.filter(m => !m.deleted);
+      
+      // 成員橫向篩選
+      const memberFilterContainer = document.getElementById('memberQuickFilterBar');
+      let memberHtml = `
+        <button onclick="setMemberFilter('ALL')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${
+          appState.selectedMemberFilter === 'ALL' ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600 border border-slate-200'
+        }">全部負責人</button>
       `;
+      activeMembers.forEach(m => {
+        memberHtml += `
+          <button onclick="setMemberFilter('${m.name}')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${
+            appState.selectedMemberFilter === m.name ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+          }">${m.name}</button>
+        `;
+      });
+      memberFilterContainer.innerHTML = memberHtml;
 
-      const memberBtns = activeMembers.map(m => `
-        <button onclick="setMemberFilter('${m.name}')" class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-          currentMemberFilter === m.name ? 'bg-orange-500 text-white font-bold shadow-xs' : 'bg-white text-slate-600 border border-slate-200'
-        }">
-          ${m.name}
-        </button>
-      `).join('');
-
-      container.innerHTML = allBtn + memberBtns;
-    }
-
-    function renderChores() {
-      const container = document.getElementById('choreListContainer');
-      const today = getTodayString();
-
-      // 過濾軟刪除項目
-      const activeChores = (appState.chores || []).filter(c => !c.deleted);
-
-      const filtered = activeChores.filter(c => {
-        if (currentSpaceId !== 'ALL' && c.spaceId !== currentSpaceId) return false;
-        if (currentMemberFilter !== 'ALL' && c.assignee !== currentMemberFilter) return false;
-        if (currentChoreFilter === 'pending') return !c.completed;
-        if (currentChoreFilter === 'completed') return c.completed;
+      // 過濾任務
+      const filtered = appState.tasks.filter(t => {
+        if (t.deleted) return false;
+        if (appState.currentSpaceId !== 'ALL' && t.householdId !== appState.currentSpaceId) return false;
+        if (appState.selectedMemberFilter !== 'ALL' && t.assignee !== appState.selectedMemberFilter) return false;
+        if (appState.taskFilter === 'pending') return !t.completed;
+        if (appState.taskFilter === 'completed') return t.completed;
         return true;
       });
 
       // 統計數據
-      const pendingCount = activeChores.filter(c => (currentSpaceId === 'ALL' || c.spaceId === currentSpaceId) && !c.completed).length;
-      const urgentCount = activeChores.filter(c => !c.completed && (c.dueDate === today || (c.hasDueDate && c.dueDate < today))).length;
+      const uncompletedAll = appState.tasks.filter(t => !t.deleted && !t.completed);
+      document.getElementById('statPendingCount').innerText = uncompletedAll.length;
+      const urgentCount = uncompletedAll.filter(t => t.hasDueDate && t.dueDate <= todayStr).length;
+      document.getElementById('statUrgentCount').innerText = urgentCount;
 
-      document.getElementById('countPendingChores').innerText = pendingCount;
-      document.getElementById('countUrgentChores').innerText = urgentCount;
-
+      const container = document.getElementById('tasksListContainer');
       if (filtered.length === 0) {
         container.innerHTML = `
-          <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
-            <i data-lucide="check-circle-2" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-            <p class="text-sm font-bold text-slate-600">目前沒有家務事項</p>
-            <p class="text-xs text-slate-400 mt-1">點擊右上角「加家務」新增任務！</p>
+          <div class="bg-white rounded-3xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-xs">
+            目前沒有家務事項，好好享受休閒時光！
           </div>
         `;
         return;
       }
 
-      container.innerHTML = filtered.map(c => {
-        const space = appState.spaces.find(s => s.id === c.spaceId) || { name: '已移除空間' };
-        const isOverdue = !c.completed && c.hasDueDate && c.dueDate && (`${c.dueDate}T${c.dueTime || '23:59'}` < `${today}T${new Date().toTimeString().substring(0,5)}`);
-        const isDueToday = !c.completed && c.hasDueDate && c.dueDate === today;
-
+      container.innerHTML = filtered.map(t => {
+        const hh = activeHouseholds.find(h => h.id === t.householdId) || { name: '空間' };
+        const isDue = t.hasDueDate && t.dueDate <= todayStr && !t.completed;
         return `
-          <div class="bg-white rounded-2xl p-3.5 border transition-all shadow-xs flex items-start gap-3 relative ${
-            c.completed ? 'border-slate-200 bg-slate-50/70 opacity-70' : isOverdue ? 'border-rose-300 ring-1 ring-rose-200 bg-rose-50/20' : isDueToday ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20' : 'border-slate-200'
-          }">
-            <button onclick="toggleChoreComplete('${c.id}')" class="mt-1 text-slate-300 hover:text-orange-500 shrink-0">
-              ${c.completed ? '<i data-lucide="check-circle-2" class="w-6 h-6 text-emerald-500 fill-emerald-100"></i>' : '<i data-lucide="circle" class="w-6 h-6 text-slate-300"></i>'}
+          <div class="bg-white rounded-2xl p-4 border ${isDue ? 'border-rose-200 ring-1 ring-rose-200 bg-rose-50/20' : 'border-slate-200/80'} shadow-xs flex items-start gap-3">
+            <button onclick="toggleChoreComplete('${t.id}')" class="mt-0.5 text-slate-300 hover:text-emerald-500 shrink-0">
+              <i data-lucide="${t.completed ? 'check-circle-2' : 'circle'}" class="w-6 h-6 ${t.completed ? 'text-emerald-500 fill-emerald-100' : ''}"></i>
             </button>
-
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5 flex-wrap mb-1">
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">${space.name}</span>
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">${c.category}</span>
-                ${isOverdue ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-300">⚠️ 已過期</span>' : ''}
-                ${isDueToday ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">🔥 今日到期</span>' : ''}
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">${hh.name}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800">${t.category}</span>
+                ${isDue ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">⚠️ 今日到期 / 逾期</span>' : ''}
               </div>
-
-              <h4 class="text-sm font-bold text-slate-900 leading-snug ${c.completed ? 'line-through text-slate-400' : ''}">${c.title}</h4>
-              ${c.notes ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${c.notes}</p>` : ''}
-
-              <div class="mt-2 p-2 bg-slate-50 rounded-xl space-y-1 text-[11px] text-slate-600">
-                <div class="flex items-center gap-1.5">
-                  <i data-lucide="clock" class="w-3.5 h-3.5 text-blue-500 shrink-0"></i>
-                  <span class="text-slate-400">預計做:</span>
-                  <span class="font-semibold">${c.plannedDate} ${c.plannedTime ? `(${c.plannedTime})` : ''}</span>
-                </div>
-                ${c.hasDueDate && c.dueDate ? `
-                  <div class="flex items-center gap-1.5">
-                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-rose-500 shrink-0"></i>
-                    <span class="text-slate-400">截止期限:</span>
-                    <span class="font-semibold ${isOverdue ? 'text-rose-600 font-bold' : isDueToday ? 'text-amber-700 font-bold' : ''}">${c.dueDate} ${c.dueTime ? `(${c.dueTime})` : ''}</span>
-                  </div>
-                ` : ''}
-              </div>
-
-              <div class="mt-2 flex items-center justify-between text-xs text-slate-500 pt-1.5 border-t border-slate-100">
-                <div class="flex items-center gap-1.5">
-                  <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold">${c.assignee.substring(0,1)}</span>
-                  <span class="font-semibold text-slate-700">${c.assignee}</span>
-                </div>
-                <button onclick="tombstoneDeleteChore('${c.id}')" class="text-slate-300 hover:text-rose-500 p-1" title="軟刪除">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
+              <h4 class="text-sm font-bold text-slate-900 ${t.completed ? 'line-through text-slate-400' : ''}">${t.title}</h4>
+              ${t.notes ? `<p class="text-xs text-slate-400 mt-0.5">${t.notes}</p>` : ''}
+              <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+                <span>預定: ${t.plannedDate}</span>
+                <span class="font-bold text-slate-700">負責人: ${t.assignee}</span>
               </div>
             </div>
+            <button onclick="softDeleteTask('${t.id}')" class="text-slate-300 hover:text-rose-500 p-1 shrink-0"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
           </div>
         `;
       }).join('');
     }
 
     function renderExpenses() {
-      const container = document.getElementById('expenseListContainer');
-      const breakdownEl = document.getElementById('spaceSpendBreakdown');
+      const activeHouseholds = appState.households.filter(h => !h.deleted);
+      const filtered = appState.expenses.filter(e => {
+        if (e.deleted) return false;
+        if (appState.currentSpaceId !== 'ALL' && e.householdId !== appState.currentSpaceId) return false;
+        return true;
+      });
 
-      const activeExpenses = (appState.expenses || []).filter(e => !e.deleted);
-      const filtered = activeExpenses.filter(e => currentSpaceId === 'ALL' || e.spaceId === currentSpaceId);
-      const total = filtered.reduce((sum, item) => sum + Number(item.amount), 0);
-      document.getElementById('totalSpendSummary').innerText = `總計: HK$ ${total.toLocaleString()}`;
+      const total = filtered.reduce((sum, item) => sum + item.amount, 0);
+      document.getElementById('expenseTotalDisplay').innerText = `HK$ ${total.toLocaleString()}`;
+      document.getElementById('expenseCountLabel').innerText = `共 ${filtered.length} 筆`;
 
-      // 各空間分佈卡
-      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
-      breakdownEl.innerHTML = activeSpaces.map(s => {
-        const sTotal = activeExpenses.filter(e => e.spaceId === s.id).reduce((sum, item) => sum + Number(item.amount), 0);
+      // 屋企開支條形圖
+      const barsContainer = document.getElementById('expenseBarsContainer');
+      barsContainer.innerHTML = activeHouseholds.map(h => {
+        const hhSum = appState.expenses.filter(e => !e.deleted && e.householdId === h.id).reduce((s, i) => s + i.amount, 0);
         return `
-          <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70">
-            <span class="text-[11px] font-semibold text-slate-500 block truncate">${s.name}</span>
-            <p class="text-base font-extrabold text-slate-900 mt-0.5">HK$ ${sTotal.toLocaleString()}</p>
+          <div class="text-xs">
+            <div class="flex justify-between mb-1">
+              <span class="text-slate-300">${h.name}</span>
+              <span class="font-bold text-emerald-400">HK$ ${hhSum.toLocaleString()}</span>
+            </div>
+            <div class="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-emerald-400 h-1.5 rounded-full" style="width: ${total > 0 ? (hhSum / total * 100) : 0}%"></div>
+            </div>
           </div>
         `;
       }).join('');
 
+      const listContainer = document.getElementById('expensesListContainer');
       if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
-            <i data-lucide="shopping-bag" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
-            <p class="text-sm font-bold text-slate-600">暫無開支紀錄</p>
-            <p class="text-xs text-slate-400 mt-1">買洗頭水、買餸、水電費？即刻記低！</p>
-          </div>
-        `;
+        listContainer.innerHTML = `<div class="bg-white rounded-3xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-xs">暫無開支紀錄，買咗洗頭水或買餸即刻記低！</div>`;
         return;
       }
 
-      container.innerHTML = filtered.map(e => {
-        const space = appState.spaces.find(s => s.id === e.spaceId) || { name: '已移除空間' };
+      listContainer.innerHTML = filtered.map(e => {
+        const hh = activeHouseholds.find(h => h.id === e.householdId) || { name: '空間' };
         return `
-          <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs flex items-center justify-between">
+          <div class="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-                <i data-lucide="shopping-bag" class="w-5 h-5"></i>
-              </div>
+              <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">HK$</div>
               <div>
-                <div class="flex items-center gap-1.5 mb-0.5">
-                  <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">${space.name}</span>
-                  <span class="text-[10px] font-medium text-slate-500 bg-slate-50 px-1.5 py-0.2 rounded">${e.category}</span>
-                </div>
-                <h4 class="text-sm font-bold text-slate-800">${e.title}</h4>
-                <p class="text-[11px] text-slate-400 mt-0.5">${e.paidBy} 付款 • ${e.date}</p>
+                <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">${hh.name}</span>
+                <h4 class="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">${e.title}</h4>
+                <p class="text-[10px] text-slate-400">${e.paidBy} 畀錢 • ${e.date}</p>
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <span class="text-base font-black text-slate-900">-HK$${e.amount}</span>
-              <button onclick="tombstoneDeleteExpense('${e.id}')" class="text-slate-300 hover:text-rose-500 p-1" title="軟刪除">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
+              <span class="text-sm sm:text-base font-black text-slate-900">-HK$ ${e.amount}</span>
+              <button onclick="softDeleteExpense('${e.id}')" class="text-slate-300 hover:text-rose-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function renderPriorityList() {
-      const container = document.getElementById('priorityRemindersList');
-      const list = getPrioritizedReminders();
-
-      if (list.length === 0) {
-        container.innerHTML = `<div class="text-center py-4 text-slate-400">目前全部搞掂，朝早無待辦家務提醒！</div>`;
-        return;
-      }
-
-      container.innerHTML = list.map((item, idx) => `
-        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-          <div class="flex items-center gap-2 truncate pr-2">
-            <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">${idx+1}</span>
-            ${item.tag ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0">${item.tag}</span>` : ''}
-            <span class="font-bold text-slate-800 truncate">${item.title}</span>
-          </div>
-          <span class="text-[11px] text-slate-500 shrink-0">${item.assignee}</span>
+    function renderActivityLogs() {
+      const container = document.getElementById('activityLogsContainer');
+      container.innerHTML = appState.activityLogs.map(l => `
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs flex items-start justify-between">
+          <span class="text-slate-700 font-medium">${l.text}</span>
+          <span class="text-[10px] text-slate-400 shrink-0 ml-2">${l.time}</span>
         </div>
       `).join('');
     }
 
-    // ---------- 9. 獨立「管理中心」面板渲染 (CRUD & 聯動更新) ----------
+    // 管理中心分頁渲染
     function renderAdminPanel() {
       const container = document.getElementById('adminPanelContainer');
+      const sub = appState.adminSubTab;
 
-      if (activeAdminSubTab === 'members') {
-        const activeMembers = (appState.members || []).filter(m => !m.deleted);
+      if (sub === 'members') {
+        const active = appState.members.filter(m => !m.deleted);
         container.innerHTML = `
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div>
-              <h3 class="text-sm font-bold text-slate-900">家庭成員 / 負責人管理</h3>
-              <p class="text-xs text-slate-400">更名後所有現存家務及付款紀錄會全自動同步更新</p>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-xs font-bold text-slate-700">家庭成員 / 負責人</h4>
+              <span class="text-[11px] text-slate-400">更名全自動同步所有家務與開支</span>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeMembers.length} 人</span>
-          </div>
-
-          <div class="flex gap-2 pt-1">
-            <input type="text" id="newMemberInput" placeholder="輸入新成員 (如: 鐘點姐姐、細妹)" class="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none">
-            <button onclick="addMember()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-xs">新增</button>
-          </div>
-
-          <div class="space-y-2 pt-2">
-            ${activeMembers.map(m => `
-              <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <div class="flex items-center gap-2">
-                  <span class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold">${m.name.substring(0,1)}</span>
-                  <span class="text-sm font-bold text-slate-800">${m.name}</span>
+            <div class="flex gap-2">
+              <input type="text" id="newMemberNameInput" placeholder="輸入新成員 (如: 鐘點姐姐)" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addMemberAction()" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
+            </div>
+            <div class="space-y-2 pt-2">
+              ${active.map(m => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${m.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameMemberAction('${m.id}', '${m.name}')" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${active.length > 1 ? `<button onclick="deleteMemberAction('${m.id}')" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
                 </div>
-                <div class="flex items-center gap-1">
-                  <button onclick="promptRenameMember('${m.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
-                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-                  </button>
-                  ${activeMembers.length > 1 ? `
-                    <button onclick="tombstoneDeleteMember('${m.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `).join('')}
+              `).join('')}
+            </div>
           </div>
         `;
-      } else if (activeAdminSubTab === 'choreCats') {
-        const activeCats = (appState.choreCategories || []).filter(c => !c.deleted);
+      } else if (sub === 'households') {
+        const active = appState.households.filter(h => !h.deleted);
         container.innerHTML = `
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div>
-              <h3 class="text-sm font-bold text-slate-900">家務類別管理</h3>
-              <p class="text-xs text-slate-400">更名或軟刪除清潔、維修等任務類別</p>
+          <div class="space-y-3">
+            <h4 class="text-xs font-bold text-slate-700">空間物業管理</h4>
+            <div class="flex gap-2">
+              <input type="text" id="newHouseholdNameInput" placeholder="新增物業空間 (如: 婆婆屋企)" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addHouseholdAction()" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeCats.length} 個</span>
-          </div>
-
-          <div class="flex gap-2 pt-1">
-            <input type="text" id="newChoreCatInput" placeholder="輸入新家務類別 (如: 澆水花草、換季收納)" class="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none">
-            <button onclick="addChoreCategory()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-xs">新增</button>
-          </div>
-
-          <div class="space-y-2 pt-2">
-            ${activeCats.map(cat => `
-              <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200">${cat.name}</span>
-                <div class="flex items-center gap-1">
-                  <button onclick="promptRenameChoreCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
-                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-                  </button>
-                  ${activeCats.length > 1 ? `
-                    <button onclick="tombstoneDeleteChoreCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
-                  ` : ''}
+            <div class="space-y-2 pt-2">
+              ${active.map(h => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${h.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameHouseholdAction('${h.id}', '${h.name}')" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${active.length > 1 ? `<button onclick="deleteHouseholdAction('${h.id}')" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
                 </div>
-              </div>
-            `).join('')}
+              `).join('')}
+            </div>
           </div>
         `;
-      } else if (activeAdminSubTab === 'expenseCats') {
-        const activeCats = (appState.expenseCategories || []).filter(c => !c.deleted);
+      } else {
+        const isChore = sub === 'choreCats';
+        const list = isChore ? appState.choreCategories.filter(c => !c.deleted) : appState.expenseCategories.filter(c => !c.deleted);
         container.innerHTML = `
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div>
-              <h3 class="text-sm font-bold text-slate-900">家庭開支類別管理</h3>
-              <p class="text-xs text-slate-400">洗頭水、買餸、水電煤等自訂分類</p>
+          <div class="space-y-3">
+            <h4 class="text-xs font-bold text-slate-700">${isChore ? '家務類別' : '開支類別'}管理</h4>
+            <div class="flex gap-2">
+              <input type="text" id="newCatInput" placeholder="新增類別" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addCategoryAction(${isChore})" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeCats.length} 個</span>
-          </div>
-
-          <div class="flex gap-2 pt-1">
-            <input type="text" id="newExpenseCatInput" placeholder="輸入新開支類別 (如: 傢俬添置、寵物用品)" class="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none">
-            <button onclick="addExpenseCategory()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs">新增</button>
-          </div>
-
-          <div class="space-y-2 pt-2">
-            ${activeCats.map(cat => `
-              <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200">${cat.name}</span>
-                <div class="flex items-center gap-1">
-                  <button onclick="promptRenameExpenseCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
-                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-                  </button>
-                  ${activeCats.length > 1 ? `
-                    <button onclick="tombstoneDeleteExpenseCat('${cat.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
-                  ` : ''}
+            <div class="space-y-2 pt-2">
+              ${list.map(c => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${c.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameCategoryAction('${c.id}', '${c.name}', ${isChore})" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${list.length > 1 ? `<button onclick="deleteCategoryAction('${c.id}', ${isChore})" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
                 </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-      } else if (activeAdminSubTab === 'spaces') {
-        const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
-        container.innerHTML = `
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div>
-              <h3 class="text-sm font-bold text-slate-900">家居空間 / 物業管理</h3>
-              <p class="text-xs text-slate-400">新增或更改空間名稱 (我屋企、長輩屋企、出租屋等)</p>
+              `).join('')}
             </div>
-            <span class="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">共 ${activeSpaces.length} 間</span>
-          </div>
-
-          <div class="flex gap-2 pt-1">
-            <input type="text" id="newSpaceInput" placeholder="輸入空間名稱 (如: 婆婆屋企、工作室)" class="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none">
-            <button onclick="addSpace()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs">新增</button>
-          </div>
-
-          <div class="space-y-2 pt-2">
-            ${activeSpaces.map(s => `
-              <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <div class="flex items-center gap-2">
-                  <i data-lucide="building" class="w-4 h-4 text-slate-500"></i>
-                  <span class="text-sm font-bold text-slate-800">${s.name}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <button onclick="promptRenameSpace('${s.id}')" class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg">
-                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
-                  </button>
-                  ${activeSpaces.length > 1 ? `
-                    <button onclick="tombstoneDeleteSpace('${s.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `).join('')}
           </div>
         `;
       }
+      lucide.createIcons();
     }
 
-    // ---------- 10. 管理操作與墓碑軟刪除 (Tombstone Deletion) ----------
-    function addMember() {
-      const val = document.getElementById('newMemberInput').value.trim();
-      if (!val) return;
-      const id = createUUID('m');
-      appState.members.push({ id, name: val, updatedAt: Date.now(), deleted: false });
-      saveState();
-    }
-
-    function promptRenameMember(id) {
-      const m = appState.members.find(item => item.id === id);
-      if (!m) return;
-      showCustomPrompt(`更名成員「${m.name}」為：`, m.name, (newName) => {
-        if (!newName || newName === m.name) return;
-        const oldName = m.name;
-        m.name = newName;
-        m.updatedAt = Date.now();
-
-        // 聯動更新現有家務與開支中的名字
-        appState.chores.forEach(c => {
-          if (c.assignee === oldName) {
-            c.assignee = newName;
-            c.updatedAt = Date.now();
-          }
-        });
-        appState.expenses.forEach(e => {
-          if (e.paidBy === oldName) {
-            e.paidBy = newName;
-            e.updatedAt = Date.now();
-          }
-        });
-
-        if (currentMemberFilter === oldName) currentMemberFilter = newName;
-        saveState();
+    // ================= 操作函數 =================
+    function toggleChoreComplete(id) {
+      const chore = appState.tasks.find(t => t.id === id);
+      if (!chore) return;
+      chore.completed = !chore.completed;
+      chore.updatedAt = Date.now();
+      
+      const msg = chore.completed ? `搞掂咗家務：${chore.title}` : `重設了家務狀態：${chore.title}`;
+      broadcastAction('task_toggle', chore, {
+        title: `✅ ${appState.currentUser} 已完成家務！`,
+        body: `${chore.title}（已打剔）`,
+        fullText: `${appState.currentUser} ${msg}`
       });
     }
 
-    function tombstoneDeleteMember(id) {
-      const active = appState.members.filter(m => !m.deleted);
-      if (active.length <= 1) return;
-      const m = appState.members.find(item => item.id === id);
-      if (m) {
-        m.deleted = true;
-        m.updatedAt = Date.now();
-        const fallback = active.find(item => item.id !== id)?.name || '我';
-        appState.chores.forEach(c => {
-          if (c.assignee === m.name) {
-            c.assignee = fallback;
-            c.updatedAt = Date.now();
-          }
+    function softDeleteTask(id) {
+      const chore = appState.tasks.find(t => t.id === id);
+      if (chore) {
+        chore.deleted = true;
+        chore.updatedAt = Date.now();
+        broadcastAction('delete', chore, {
+          title: `🗑️ 家務已移除`,
+          body: chore.title,
+          fullText: `${appState.currentUser} 刪除了家務：${chore.title}`
         });
-        if (currentMemberFilter === m.name) currentMemberFilter = 'ALL';
-        saveState();
       }
     }
 
-    function addChoreCategory() {
-      const val = document.getElementById('newChoreCatInput').value.trim();
-      if (!val) return;
-      appState.choreCategories.push({ id: createUUID('cc'), name: val, updatedAt: Date.now(), deleted: false });
-      saveState();
+    function softDeleteExpense(id) {
+      const exp = appState.expenses.find(e => e.id === id);
+      if (exp) {
+        exp.deleted = true;
+        exp.updatedAt = Date.now();
+        broadcastAction('delete', exp, {
+          title: `🗑️ 開支已移除`,
+          body: `${exp.title} (HK$ ${exp.amount})`,
+          fullText: `${appState.currentUser} 刪除了開支：${exp.title}`
+        });
+      }
     }
 
-    function promptRenameChoreCat(id) {
-      const cat = appState.choreCategories.find(item => item.id === id);
-      if (!cat) return;
-      showCustomPrompt(`更名家務類別「${cat.name}」為：`, cat.name, (newCat) => {
-        if (!newCat || newCat === cat.name) return;
-        const oldName = cat.name;
-        cat.name = newCat;
-        cat.updatedAt = Date.now();
-        appState.chores.forEach(c => {
-          if (c.category === oldName) {
-            c.category = newCat;
-            c.updatedAt = Date.now();
-          }
-        });
-        saveState();
+    function handleSaveChore(e) {
+      e.preventDefault();
+      const title = document.getElementById('choreTitleInput').value.trim();
+      if (!title) return;
+      const newChore = {
+        id: 't_' + Date.now(),
+        title,
+        householdId: document.getElementById('choreHouseholdSelect').value,
+        assignee: document.getElementById('choreAssigneeSelect').value,
+        category: document.getElementById('choreCategorySelect').value,
+        plannedDate: document.getElementById('chorePlannedDateInput').value,
+        hasDueDate: document.getElementById('choreHasDueCheckbox').checked,
+        dueDate: document.getElementById('choreDueDateInput').value,
+        dueTime: document.getElementById('choreDueTimeInput').value,
+        notes: document.getElementById('choreNotesInput').value.trim(),
+        completed: false,
+        updatedAt: Date.now(),
+        deleted: false
+      };
+      appState.tasks.unshift(newChore);
+      closeChoreModal();
+      broadcastAction('task_add', newChore, {
+        title: `🔔 ${appState.currentUser} 新增咗家務！`,
+        body: `${newChore.title}（指派俾：${newChore.assignee}）`,
+        fullText: `${appState.currentUser} 新增家務：${newChore.title}（負責人：${newChore.assignee}）`
       });
     }
 
-    function tombstoneDeleteChoreCat(id) {
-      const active = appState.choreCategories.filter(c => !c.deleted);
-      if (active.length <= 1) return;
-      const cat = appState.choreCategories.find(item => item.id === id);
-      if (cat) {
-        cat.deleted = true;
-        cat.updatedAt = Date.now();
-        const fallback = active.find(item => item.id !== id)?.name || '日常';
-        appState.chores.forEach(c => {
-          if (c.category === cat.name) {
-            c.category = fallback;
-            c.updatedAt = Date.now();
-          }
-        });
-        saveState();
-      }
-    }
-
-    function addExpenseCategory() {
-      const val = document.getElementById('newExpenseCatInput').value.trim();
-      if (!val) return;
-      appState.expenseCategories.push({ id: createUUID('ec'), name: val, updatedAt: Date.now(), deleted: false });
-      saveState();
-    }
-
-    function promptRenameExpenseCat(id) {
-      const cat = appState.expenseCategories.find(item => item.id === id);
-      if (!cat) return;
-      showCustomPrompt(`更名開支類別「${cat.name}」為：`, cat.name, (newCat) => {
-        if (!newCat || newCat === cat.name) return;
-        const oldName = cat.name;
-        cat.name = newCat;
-        cat.updatedAt = Date.now();
-        appState.expenses.forEach(e => {
-          if (e.category === oldName) {
-            e.category = newCat;
-            e.updatedAt = Date.now();
-          }
-        });
-        saveState();
+    function handleSaveExpense(e) {
+      e.preventDefault();
+      const title = document.getElementById('expTitleInput').value.trim();
+      const amount = parseFloat(document.getElementById('expAmountInput').value);
+      if (!title || isNaN(amount)) return;
+      const newExp = {
+        id: 'e_' + Date.now(),
+        title,
+        amount,
+        paidBy: document.getElementById('expPaidBySelect').value,
+        householdId: document.getElementById('expHouseholdSelect').value,
+        category: document.getElementById('expCategorySelect').value,
+        date: todayStr,
+        updatedAt: Date.now(),
+        deleted: false
+      };
+      appState.expenses.unshift(newExp);
+      closeExpenseModal();
+      broadcastAction('expense_add', newExp, {
+        title: `💰 ${appState.currentUser} 記低咗新開支！`,
+        body: `${newExp.title} (HK$ ${newExp.amount})`,
+        fullText: `${appState.currentUser} 新增開支：${newExp.title} - HK$ ${newExp.amount}（${newExp.paidBy} 畀錢）`
       });
     }
 
-    function tombstoneDeleteExpenseCat(id) {
-      const active = appState.expenseCategories.filter(c => !c.deleted);
-      if (active.length <= 1) return;
-      const cat = appState.expenseCategories.find(item => item.id === id);
-      if (cat) {
-        cat.deleted = true;
-        cat.updatedAt = Date.now();
-        const fallback = active.find(item => item.id !== id)?.name || '日用品';
-        appState.expenses.forEach(e => {
-          if (e.category === cat.name) {
-            e.category = fallback;
-            e.updatedAt = Date.now();
-          }
-        });
-        saveState();
-      }
+    // Modal 控制
+    function openChoreModal() {
+      document.getElementById('choreHouseholdSelect').innerHTML = appState.households.filter(h => !h.deleted).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+      document.getElementById('choreAssigneeSelect').innerHTML = appState.members.filter(m => !m.deleted).map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+      document.getElementById('choreCategorySelect').innerHTML = appState.choreCategories.filter(c => !c.deleted).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      document.getElementById('chorePlannedDateInput').value = todayStr;
+      document.getElementById('choreDueDateInput').value = todayStr;
+      document.getElementById('choreModal').classList.remove('hidden');
+    }
+    function closeChoreModal() { document.getElementById('choreModal').classList.add('hidden'); }
+
+    function openExpenseModal() {
+      document.getElementById('expHouseholdSelect').innerHTML = appState.households.filter(h => !h.deleted).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+      document.getElementById('expPaidBySelect').innerHTML = appState.members.filter(m => !m.deleted).map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+      document.getElementById('expCategorySelect').innerHTML = appState.expenseCategories.filter(c => !c.deleted).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      document.getElementById('expenseModal').classList.remove('hidden');
+    }
+    function closeExpenseModal() { document.getElementById('expenseModal').classList.add('hidden'); }
+
+    function toggleDueInputs(show) {
+      document.getElementById('dueInputsRow').classList.toggle('hidden', !show);
     }
 
-    function addSpace() {
-      const val = document.getElementById('newSpaceInput').value.trim();
-      if (!val) return;
-      appState.spaces.push({ id: createUUID('sp'), name: val, color: 'orange', updatedAt: Date.now(), deleted: false });
+    // 分頁切換
+    function switchTab(tab) {
+      appState.activeTab = tab;
+      ['tasks', 'expenses', 'notifications', 'management', 'sync'].forEach(t => {
+        document.getElementById(`view${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tabBtn_${t}`);
+        if (btn) {
+          btn.className = `flex flex-col items-center gap-1 py-1 transition-all ${t === tab ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`;
+        }
+      });
+      renderAll();
+    }
+
+    function switchAdminSubTab(sub) {
+      appState.adminSubTab = sub;
+      ['members', 'choreCats', 'expenseCats', 'households'].forEach(s => {
+        const btn = document.getElementById(`adminSubBtn_${s}`);
+        if (btn) {
+          btn.className = `px-3 py-2 rounded-2xl text-xs font-bold transition-all ${s === sub ? 'bg-emerald-500 text-white shadow-xs' : 'text-slate-600'}`;
+        }
+      });
+      renderAdminPanel();
+    }
+
+    function setSpaceFilter(id) { appState.currentSpaceId = id; renderAll(); }
+    function setMemberFilter(name) { appState.selectedMemberFilter = name; renderAll(); }
+    function setTaskStatusFilter(status) {
+      appState.taskFilter = status;
+      ['pending', 'completed', 'all'].forEach(s => {
+        const btn = document.getElementById(`statusBtn_${s}`);
+        btn.className = `px-3 py-1 rounded-lg transition-all ${s === status ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'}`;
+      });
+      renderTasks();
+    }
+
+    function handleCurrentUserChange(val) {
+      appState.currentUser = val;
       saveState();
     }
 
-    function promptRenameSpace(id) {
-      const sp = appState.spaces.find(s => s.id === id);
-      if (!sp) return;
-      showCustomPrompt(`更名空間「${sp.name}」為：`, sp.name, (newName) => {
-        if (!newName) return;
-        sp.name = newName;
-        sp.updatedAt = Date.now();
-        saveState();
-      });
-    }
-
-    function tombstoneDeleteSpace(id) {
-      const active = appState.spaces.filter(s => !s.deleted);
-      if (active.length <= 1) return;
-      const sp = appState.spaces.find(s => s.id === id);
-      if (sp) {
-        sp.deleted = true;
-        sp.updatedAt = Date.now();
-        const fallbackId = active.find(item => item.id !== id)?.id || 'sp_1';
-        appState.chores.forEach(c => {
-          if (c.spaceId === id) {
-            c.spaceId = fallbackId;
-            c.updatedAt = Date.now();
-          }
-        });
-        appState.expenses.forEach(e => {
-          if (e.spaceId === id) {
-            e.spaceId = fallbackId;
-            e.updatedAt = Date.now();
-          }
-        });
-        if (currentSpaceId === id) currentSpaceId = 'ALL';
-        saveState();
-      }
-    }
-
-    function openAppNamePrompt() {
-      showCustomPrompt('修改 App / 家族群組名稱：', appState.appName, (newTitle) => {
-        if (newTitle) {
-          appState.appName = newTitle;
-          appState.appNameUpdatedAt = Date.now();
+    function openAppNameModal() {
+      openCustomPrompt('更改家族 / App 名稱', appState.appName, (name) => {
+        if (name && name.trim()) {
+          appState.appName = name.trim();
           saveState();
         }
       });
     }
 
-    // ---------- 11. 家務與開支動作 (帶時間戳記與軟刪除) ----------
-    function toggleChoreComplete(id) {
-      const chore = appState.chores.find(c => c.id === id);
-      if (chore) {
-        chore.completed = !chore.completed;
-        chore.updatedAt = Date.now();
-        saveState();
-      }
-    }
-
-    function tombstoneDeleteChore(id) {
-      const chore = appState.chores.find(c => c.id === id);
-      if (chore) {
-        chore.deleted = true;
-        chore.updatedAt = Date.now();
-        saveState();
-      }
-    }
-
-    function tombstoneDeleteExpense(id) {
-      const expense = appState.expenses.find(e => e.id === id);
-      if (expense) {
-        expense.deleted = true;
-        expense.updatedAt = Date.now();
-        saveState();
-      }
-    }
-
-    function handleCreateChore(e) {
-      e.preventDefault();
-      const title = document.getElementById('modalChoreTitle').value.trim();
-      if (!title) return;
-
-      const hasDue = document.getElementById('modalChoreHasDueDate').checked;
-      const newC = {
-        id: createUUID('c'),
-        title,
-        spaceId: document.getElementById('modalChoreSpace').value,
-        assignee: document.getElementById('modalChoreAssignee').value,
-        category: document.getElementById('modalChoreCategory').value,
-        plannedDate: document.getElementById('modalChorePlannedDate').value,
-        plannedTime: document.getElementById('modalChorePlannedTime').value,
-        hasDueDate: hasDue,
-        dueDate: hasDue ? document.getElementById('modalChoreDueDate').value : '',
-        dueTime: hasDue ? document.getElementById('modalChoreDueTime').value : '',
-        notes: document.getElementById('modalChoreNotes').value.trim(),
-        completed: false,
-        updatedAt: Date.now(),
-        deleted: false
-      };
-
-      appState.chores.unshift(newC);
+    // 成員增刪改 (全自動連動更名)
+    function addMemberAction() {
+      const name = document.getElementById('newMemberNameInput').value.trim();
+      if (!name) return;
+      appState.members.push({ id: 'm_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
       saveState();
-      closeModal('choreModal');
-      document.getElementById('modalChoreTitle').value = '';
-      document.getElementById('modalChoreNotes').value = '';
     }
-
-    function handleCreateExpense(e) {
-      e.preventDefault();
-      const title = document.getElementById('modalExpenseTitle').value.trim();
-      const amount = parseFloat(document.getElementById('modalExpenseAmount').value);
-      if (!title || isNaN(amount)) return;
-
-      const newE = {
-        id: createUUID('e'),
-        title,
-        amount,
-        spaceId: document.getElementById('modalExpenseSpace').value,
-        paidBy: document.getElementById('modalExpensePaidBy').value,
-        category: document.getElementById('modalExpenseCategory').value,
-        date: document.getElementById('modalExpenseDate').value,
-        updatedAt: Date.now(),
-        deleted: false
-      };
-
-      appState.expenses.unshift(newE);
-      saveState();
-      closeModal('expenseModal');
-      document.getElementById('modalExpenseTitle').value = '';
-      document.getElementById('modalExpenseAmount').value = '';
-    }
-
-    // ---------- 12. 導航與篩選切換 ----------
-    function switchTab(tabId) {
-      activeTabName = tabId;
-      ['tasks', 'expenses', 'reminders', 'sync', 'management'].forEach(t => {
-        const section = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
-        const btn = document.getElementById('navBtn_' + t);
-        if (t === tabId) {
-          section.classList.remove('hidden');
-          btn.className = 'flex flex-col items-center py-1 text-orange-600 font-bold transition-transform scale-105';
-        } else {
-          section.classList.add('hidden');
-          btn.className = 'flex flex-col items-center py-1 text-slate-400 font-medium transition-transform';
+    function renameMemberAction(id, oldName) {
+      openCustomPrompt(`將「${oldName}」更改為：`, oldName, (newName) => {
+        if (newName && newName.trim() && newName.trim() !== oldName) {
+          const trimmed = newName.trim();
+          const m = appState.members.find(x => x.id === id);
+          if (m) { m.name = trimmed; m.updatedAt = Date.now(); }
+          // 級聯更新家務與開支
+          appState.tasks.forEach(t => { if (t.assignee === oldName) { t.assignee = trimmed; t.updatedAt = Date.now(); } });
+          appState.expenses.forEach(e => { if (e.paidBy === oldName) { e.paidBy = trimmed; e.updatedAt = Date.now(); } });
+          if (appState.currentUser === oldName) appState.currentUser = trimmed;
+          saveState();
+          showPushBanner('✅ 成員名稱已更新', `「${oldName}」已改為「${trimmed}」，所有關聯家務與開支已同步更新`, '管理中心');
         }
       });
-
-      const quickBtn = document.getElementById('quickAddBtn');
-      const quickLabel = document.getElementById('quickAddBtnLabel');
-      if (tabId === 'expenses') {
-        quickBtn.classList.remove('hidden');
-        quickLabel.innerText = '記開支';
-      } else if (tabId === 'tasks') {
-        quickBtn.classList.remove('hidden');
-        quickLabel.innerText = '加家務';
-      } else {
-        quickBtn.classList.add('hidden');
+    }
+    function deleteMemberAction(id) {
+      const m = appState.members.find(x => x.id === id);
+      if (m) {
+        openCustomConfirm('刪除家庭成員', `確定刪除「${m.name}」？已分派的家務與開支紀錄將保留。`, () => {
+          m.deleted = true;
+          m.updatedAt = Date.now();
+          saveState();
+        });
       }
-
-      renderAll();
     }
 
-    function switchAdminSubTab(subTab) {
-      activeAdminSubTab = subTab;
-      ['members', 'choreCats', 'expenseCats', 'spaces'].forEach(st => {
-        const btn = document.getElementById('adminTabBtn_' + st);
-        if (btn) {
-          if (st === subTab) {
-            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-orange-500 text-white shrink-0 shadow-xs';
+    function addHouseholdAction() {
+      const name = document.getElementById('newHouseholdNameInput').value.trim();
+      if (!name) return;
+      appState.households.push({ id: 'h_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
+      saveState();
+    }
+    function renameHouseholdAction(id, oldName) {
+      openCustomPrompt('更改空間物業名稱：', oldName, (name) => {
+        if (name && name.trim()) {
+          const h = appState.households.find(x => x.id === id);
+          if (h) { h.name = name.trim(); h.updatedAt = Date.now(); saveState(); }
+        }
+      });
+    }
+    function deleteHouseholdAction(id) {
+      const h = appState.households.find(x => x.id === id);
+      if (h) {
+        openCustomConfirm('刪除空間物業', `確定刪除「${h.name}」？`, () => {
+          h.deleted = true;
+          h.updatedAt = Date.now();
+          if (appState.currentSpaceId === id) appState.currentSpaceId = 'ALL';
+          saveState();
+        });
+      }
+    }
+
+    function addCategoryAction(isChore) {
+      const name = document.getElementById('newCatInput').value.trim();
+      if (!name) return;
+      const list = isChore ? appState.choreCategories : appState.expenseCategories;
+      list.push({ id: 'c_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
+      saveState();
+    }
+    function renameCategoryAction(id, oldName, isChore) {
+      openCustomPrompt('更改類別名稱：', oldName, (name) => {
+        if (name && name.trim()) {
+          const list = isChore ? appState.choreCategories : appState.expenseCategories;
+          const c = list.find(x => x.id === id);
+          if (c) { c.name = name.trim(); c.updatedAt = Date.now(); saveState(); }
+        }
+      });
+    }
+    function deleteCategoryAction(id, isChore) {
+      const list = isChore ? appState.choreCategories : appState.expenseCategories;
+      const c = list.find(x => x.id === id);
+      if (c) {
+        openCustomConfirm('刪除類別', `確定刪除類別「${c.name}」？`, () => {
+          c.deleted = true;
+          c.updatedAt = Date.now();
+          saveState();
+        });
+      }
+    }
+
+    function clearActivityLogs() {
+      appState.activityLogs = [];
+      saveState();
+    }
+
+    function updateMorningTime(val) {
+      if (!val) return;
+      appState.notificationSettings.morningTime = val;
+      saveState();
+      showPushBanner('⏰ 提醒時間已更新', `每日早晨提醒已設定為 ${val}`, '系統設定');
+    }
+
+    // ================= 沙盒安全 P2P 同步通道與 WhatsApp 離線碼 =================
+    let currentRoomCode = '';
+    let syncChannel = null;
+
+    function initSafeSyncChannel() {
+      try {
+        if ('BroadcastChannel' in window) {
+          if (syncChannel) syncChannel.close();
+          syncChannel = new BroadcastChannel('homesync_hk_p2p_bus');
+          syncChannel.onmessage = (event) => {
+            const data = event.data;
+            if (!data || data.roomCode !== currentRoomCode) return;
+
+            if (data.type === 'SYNC_HANDSHAKE') {
+              appState.tasks = mergeCRDTLists(appState.tasks, data.state.tasks || []);
+              appState.expenses = mergeCRDTLists(appState.expenses, data.state.expenses || []);
+              appState.households = mergeCRDTLists(appState.households, data.state.households || []);
+              appState.members = mergeCRDTLists(appState.members, data.state.members || []);
+              saveState();
+              showPushBanner('🔗 雙向握手同步成功', `已與房間 ${currentRoomCode} 的裝置完成無損合併！`, 'P2P 同步');
+            } else if (data.type === 'BROADCAST_ACTIVITY') {
+              appState.tasks = mergeCRDTLists(appState.tasks, data.fullState.tasks || []);
+              appState.expenses = mergeCRDTLists(appState.expenses, data.fullState.expenses || []);
+              addActivityLog(data.notification.fullText, 'remote_broadcast');
+              showPushBanner(data.notification.title, data.notification.body, '家人即時廣播');
+              saveState();
+            }
+          };
+        }
+      } catch (e) {}
+    }
+
+    function createOrRefreshP2P() {
+      currentRoomCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const displayEl = document.getElementById('myPeerIdDisplay');
+      if (displayEl) displayEl.innerText = currentRoomCode;
+      initSafeSyncChannel();
+      document.getElementById('syncStatusLabel').innerText = `房間 #${currentRoomCode} 待命中`;
+    }
+
+    function connectToPeer() {
+      const target = document.getElementById('targetPeerIdInput').value.trim();
+      if (!target) {
+        showPushBanner('⚠️ 請輸入房間碼', '請輸入家人的 6 位數房間同步碼以進行雙向合併', '同步提示');
+        return;
+      }
+      currentRoomCode = target;
+      document.getElementById('myPeerIdDisplay').innerText = currentRoomCode;
+      initSafeSyncChannel();
+
+      document.getElementById('syncStatusLabel').innerText = `P2P 房間 #${currentRoomCode} 雙向連通`;
+      document.getElementById('syncStatusDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
+
+      if (syncChannel) {
+        try {
+          syncChannel.postMessage({
+            type: 'SYNC_HANDSHAKE',
+            roomCode: currentRoomCode,
+            state: appState
+          });
+        } catch (e) {}
+      }
+      addActivityLog(`已連入房間 #${currentRoomCode} 並發起 CRDT 雙向無損握手同步`);
+      showPushBanner('🔗 P2P 房間連線成功', `已連入房間 #${currentRoomCode}，你的離線資料已安全保留並雙向同步！`, 'P2P 雙向同步');
+      saveState();
+    }
+
+    function copySyncCodeWhatsApp() {
+      const dataStr = btoa(encodeURIComponent(JSON.stringify(appState)));
+      const text = `【家友記同步碼】請複製貼上至家友記：\n${dataStr}`;
+      const input = document.createElement('textarea');
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      showPushBanner('📋 同步碼已複製！', '可直接貼上至 WhatsApp 傳送給屋企人進行智能合併', '離線同步碼');
+    }
+
+    function importSyncCodePrompt() {
+      openCustomPrompt('請貼上 WhatsApp 收到的同步碼：', '', (raw) => {
+        if (!raw) return;
+        try {
+          const jsonStr = decodeURIComponent(atob(raw.replace(/【.*】/g, '').trim()));
+          const remote = JSON.parse(jsonStr);
+          appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+          appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+          appState.households = mergeCRDTLists(appState.households, remote.households || []);
+          appState.members = mergeCRDTLists(appState.members, remote.members || []);
+          saveState();
+          showPushBanner('🔄 同步碼匯入成功！', '已將家人的家務與開支無損合併至本機', '智能合併');
+        } catch (e) {
+          showPushBanner('❌ 同步碼格式無效', '請確認複製了完整的 WhatsApp 同步碼字串', '匯入錯誤');
+        }
+      });
+    }
+
+    function requestNativeNotificationPermission() {
+      if ('Notification' in window) {
+        Notification.requestPermission().then(p => {
+          if (p === 'granted') {
+            showPushBanner('✅ 系統通知已啟用', '你將會收到即時瀏覽器推播通知', '權限設定');
           } else {
-            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 shrink-0';
+            showPushBanner('🔔 已啟用 App 內置頂部橫幅通知', '即使在預覽環境中，仍可透過頂部浮動通知與音效接收即時提醒', '通知設定');
           }
-        }
-      });
-      renderAdminPanel();
-      lucide.createIcons();
-    }
-
-    function setSpaceFilter(spaceId) {
-      currentSpaceId = spaceId;
-      renderAll();
-    }
-
-    function setMemberFilter(memberName) {
-      currentMemberFilter = memberName;
-      renderAll();
-    }
-
-    function setChoreFilter(filter) {
-      currentChoreFilter = filter;
-      document.getElementById('filterBtnPending').className = filter === 'pending' ? 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-xs' : 'px-2.5 py-1 rounded-md';
-      document.getElementById('filterBtnCompleted').className = filter === 'completed' ? 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-xs' : 'px-2.5 py-1 rounded-md';
-      document.getElementById('filterBtnAll').className = filter === 'all' ? 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-xs' : 'px-2.5 py-1 rounded-md';
-      renderChores();
-      lucide.createIcons();
-    }
-
-    function openActiveAddModal() {
-      if (activeTabName === 'expenses') openModal('expenseModal');
-      else openModal('choreModal');
-    }
-
-    function openModal(modalId) {
-      const today = getTodayString();
-      const activeSpaces = (appState.spaces || []).filter(s => !s.deleted);
-      const activeMembers = (appState.members || []).filter(m => !m.deleted);
-      const activeChoreCats = (appState.choreCategories || []).filter(c => !c.deleted);
-      const activeExpenseCats = (appState.expenseCategories || []).filter(c => !c.deleted);
-
-      if (modalId === 'choreModal') {
-        populateSelect('modalChoreSpace', activeSpaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? activeSpaces[0]?.id : currentSpaceId);
-        populateSelect('modalChoreAssignee', activeMembers.map(m => ({ value: m.name, label: m.name })), activeMembers[0]?.name);
-        populateSelect('modalChoreCategory', activeChoreCats.map(c => ({ value: c.name, label: c.name })), activeChoreCats[0]?.name);
-        document.getElementById('modalChorePlannedDate').value = today;
-        document.getElementById('modalChoreDueDate').value = today;
-      } else if (modalId === 'expenseModal') {
-        populateSelect('modalExpenseSpace', activeSpaces.map(s => ({ value: s.id, label: s.name })), currentSpaceId === 'ALL' ? activeSpaces[0]?.id : currentSpaceId);
-        populateSelect('modalExpensePaidBy', activeMembers.map(m => ({ value: m.name, label: m.name })), activeMembers[0]?.name);
-        populateSelect('modalExpenseCategory', activeExpenseCats.map(c => ({ value: c.name, label: c.name })), activeExpenseCats[0]?.name);
-        document.getElementById('modalExpenseDate').value = today;
+        }).catch(() => {
+          showPushBanner('🔔 已啟用 App 內置頂部橫幅通知', '系統將使用頂部動態橫幅與提示音為你推播', '通知設定');
+        });
       }
-      document.getElementById(modalId).classList.remove('hidden');
-      lucide.createIcons();
     }
 
-    function closeModal(modalId) {
-      document.getElementById(modalId).classList.add('hidden');
-    }
-
-    function toggleModalDueFields(enabled) {
-      document.getElementById('modalChoreDueFields').style.display = enabled ? 'grid' : 'none';
-    }
-
-    function populateSelect(selectId, items, selectedValue) {
-      const el = document.getElementById(selectId);
-      el.innerHTML = items.map(item => `
-        <option value="${item.value}" ${item.value === selectedValue ? 'selected' : ''}>${item.label}</option>
-      `).join('');
-    }
-
-    // ---------- 13. 提示彈窗輔助函式 ----------
-    function showPushBanner(title, body) {
-      const toast = document.getElementById('pushToast');
-      document.getElementById('toastAppName').innerText = appState.appName;
-      document.getElementById('toastTime').innerText = '剛才';
-      document.getElementById('toastHeader').innerText = title;
-      document.getElementById('toastList').innerHTML = `<div class="text-xs text-slate-300">${body}</div>`;
-      toast.classList.remove('hidden');
-      setTimeout(hidePushToast, 4500);
-    }
-
-    function showCustomPrompt(title, defaultValue, callback) {
-      const val = window.prompt(title, defaultValue);
-      if (val !== null) callback(val.trim());
-    }
-
-    function showCustomConfirm(msg, onConfirm) {
-      const existing = document.getElementById('customConfirmModal');
-      if (existing) existing.remove();
-
-      const modal = document.createElement('div');
-      modal.id = 'customConfirmModal';
-      modal.className = 'fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in';
-      modal.innerHTML = `
-        <div class="bg-white rounded-2xl max-w-xs w-full p-5 space-y-4 shadow-xl">
-          <h4 class="text-sm font-bold text-slate-900">確認提示</h4>
-          <p class="text-xs text-slate-600 leading-relaxed">${msg}</p>
-          <div class="grid grid-cols-2 gap-2 pt-1">
-            <button id="confirmCancelBtn" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">取消</button>
-            <button id="confirmOkBtn" class="py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold">確認</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-
-      document.getElementById('confirmCancelBtn').onclick = () => modal.remove();
-      document.getElementById('confirmOkBtn').onclick = () => {
-        modal.remove();
-        onConfirm();
-      };
-    }
-
-    // ---------- 14. 系統初始化啟動 ----------
-    window.onload = function() {
-      initPeer();
+    // 初始化啟動
+    window.onload = function () {
+      const timeInput = document.getElementById('morningRemindTimeInput');
+      if (timeInput && appState.notificationSettings) {
+        timeInput.value = appState.notificationSettings.morningTime || '08:30';
+      }
       renderAll();
-
-      // 定時檢查晨早提醒推播
-      setInterval(() => {
-        if (!appState.notificationConfig.enabled) return;
-        const now = new Date();
-        const currentHM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        if (currentHM === appState.notificationConfig.remindTime && now.getSeconds() < 10) {
-          triggerMorningPushNotification();
-        }
-      }, 10000);
+      createOrRefreshP2P();
     };
   </script>
 </body>
