@@ -1196,4 +1196,660 @@
     function updateScannedReceiptTotal() {
       const sum = tempScannedReceiptItems.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
       const totalEl = document.getElementById('scannedReceiptTotalText');
-      if (totalEl) totalEl.innerText = `HK$ ${
+      if (totalEl) totalEl.innerText = `HK$ ${sum.toFixed(1)}`;
+    }
+
+    function confirmSaveAllScannedItems() {
+      const validItems = tempScannedReceiptItems.filter(x => x.title.trim() !== '' && parseFloat(x.amount) > 0);
+      if (validItems.length === 0) {
+        showPushBanner('⚠️ 請填寫物品與金額', '請至少輸入一項有效嘅物品名稱及大於 0 嘅金額', '單據提示');
+        return;
+      }
+
+      const batchDate = document.getElementById('receiptBatchDate').value || todayStr;
+      const batchPayer = document.getElementById('receiptBatchPayer').value || appState.currentUser;
+      const batchHh = document.getElementById('receiptBatchHousehold').value || appState.households[0].id;
+      const nowTs = Date.now();
+
+      let totalBatchAmount = 0;
+      validItems.forEach((item, idx) => {
+        const amt = parseFloat(item.amount);
+        totalBatchAmount += amt;
+        appState.expenses.unshift({
+          id: 'e_' + nowTs + '_' + idx,
+          title: item.title.trim(),
+          amount: amt,
+          paidBy: batchPayer,
+          householdId: batchHh,
+          category: item.category,
+          date: batchDate,
+          updatedAt: nowTs + idx,
+          deleted: false
+        });
+      });
+
+      closeReceiptScannerModal();
+      broadcastAction('expense_batch_add', validItems, {
+        title: `🧾 ${batchPayer} 影單記錄咗 ${validItems.length} 項開支！`,
+        body: `包括：${validItems.map(x => x.title).slice(0, 3).join('、')} 等，合共 HK$ ${totalBatchAmount.toFixed(1)}`,
+        fullText: `${batchPayer} 影單新增 ${validItems.length} 項開支（共 HK$ ${totalBatchAmount.toFixed(1)}）`
+      });
+    }
+
+    function closeReceiptScannerModal() {
+      document.getElementById('receiptScannerModal').classList.add('hidden');
+      tempScannedReceiptItems = [];
+    }
+
+    function readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function renderActivityLogs() {
+      const container = document.getElementById('activityLogsContainer');
+      container.innerHTML = appState.activityLogs.map(l => `
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs flex items-start justify-between">
+          <span class="text-slate-700 font-medium">${l.text}</span>
+          <span class="text-[10px] text-slate-400 shrink-0 ml-2">${l.time}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderAdminPanel() {
+      const container = document.getElementById('adminPanelContainer');
+      const sub = appState.adminSubTab;
+
+      if (sub === 'members') {
+        const active = appState.members.filter(m => !m.deleted);
+        container.innerHTML = `
+          <div class="space-y-3">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-xs font-bold text-slate-700">家庭成員 / 負責人</h4>
+              <span class="text-[11px] text-slate-400">更名全自動同步所有家務與開支</span>
+            </div>
+            <div class="flex gap-2">
+              <input type="text" id="newMemberNameInput" placeholder="輸入新成員 (如: 鐘點姐姐)" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addMemberAction()" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
+            </div>
+            <div class="space-y-2 pt-2">
+              ${active.map(m => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${m.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameMemberAction('${m.id}', '${m.name}')" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${active.length > 1 ? `<button onclick="deleteMemberAction('${m.id}')" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else if (sub === 'households') {
+        const active = appState.households.filter(h => !h.deleted);
+        container.innerHTML = `
+          <div class="space-y-3">
+            <h4 class="text-xs font-bold text-slate-700">空間物業管理</h4>
+            <div class="flex gap-2">
+              <input type="text" id="newHouseholdNameInput" placeholder="新增物業空間 (如: 婆婆屋企)" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addHouseholdAction()" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
+            </div>
+            <div class="space-y-2 pt-2">
+              ${active.map(h => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${h.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameHouseholdAction('${h.id}', '${h.name}')" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${active.length > 1 ? `<button onclick="deleteHouseholdAction('${h.id}')" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        const isChore = sub === 'choreCats';
+        const list = isChore ? appState.choreCategories.filter(c => !c.deleted) : appState.expenseCategories.filter(c => !c.deleted);
+        container.innerHTML = `
+          <div class="space-y-3">
+            <h4 class="text-xs font-bold text-slate-700">${isChore ? '家務類別' : '開支類別'}管理</h4>
+            <div class="flex gap-2">
+              <input type="text" id="newCatInput" placeholder="新增類別" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <button onclick="addCategoryAction(${isChore})" class="px-3 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl">新增</button>
+            </div>
+            <div class="space-y-2 pt-2">
+              ${list.map(c => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span class="text-xs font-bold text-slate-800">${c.name}</span>
+                  <div class="flex gap-1">
+                    <button onclick="renameCategoryAction('${c.id}', '${c.name}', ${isChore})" class="p-1 text-slate-400 hover:text-emerald-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                    ${list.length > 1 ? `<button onclick="deleteCategoryAction('${c.id}', ${isChore})" class="p-1 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      lucide.createIcons();
+    }
+
+    function toggleChoreComplete(id) {
+      const chore = appState.tasks.find(t => t.id === id);
+      if (!chore) return;
+      chore.completed = !chore.completed;
+      chore.updatedAt = Date.now();
+      
+      const msg = chore.completed ? `搞掂咗家務：${chore.title}` : `重設了家務狀態：${chore.title}`;
+      broadcastAction('task_toggle', chore, {
+        title: `✅ ${appState.currentUser} 已完成家務！`,
+        body: `${chore.title}（已打剔）`,
+        fullText: `${appState.currentUser} ${msg}`
+      });
+    }
+
+    function softDeleteTask(id) {
+      const chore = appState.tasks.find(t => t.id === id);
+      if (chore) {
+        chore.deleted = true;
+        chore.updatedAt = Date.now();
+        broadcastAction('delete', chore, {
+          title: `🗑️ 家務已移除`,
+          body: chore.title,
+          fullText: `${appState.currentUser} 刪除了家務：${chore.title}`
+        });
+      }
+    }
+
+    function softDeleteExpense(id) {
+      const exp = appState.expenses.find(e => e.id === id);
+      if (exp) {
+        exp.deleted = true;
+        exp.updatedAt = Date.now();
+        broadcastAction('delete', exp, {
+          title: `🗑️ 開支已移除`,
+          body: `${exp.title} (HK$ ${exp.amount})`,
+          fullText: `${appState.currentUser} 刪除了開支：${exp.title}`
+        });
+      }
+    }
+
+    function handleSaveChore(e) {
+      e.preventDefault();
+      const title = document.getElementById('choreTitleInput').value.trim();
+      if (!title) return;
+      const newChore = {
+        id: 't_' + Date.now(),
+        title,
+        householdId: document.getElementById('choreHouseholdSelect').value,
+        assignee: document.getElementById('choreAssigneeSelect').value,
+        category: document.getElementById('choreCategorySelect').value,
+        plannedDate: document.getElementById('chorePlannedDateInput').value,
+        hasDueDate: document.getElementById('choreHasDueCheckbox').checked,
+        dueDate: document.getElementById('choreDueDateInput').value,
+        dueTime: document.getElementById('choreDueTimeInput').value,
+        notes: document.getElementById('choreNotesInput').value.trim(),
+        completed: false,
+        updatedAt: Date.now(),
+        deleted: false
+      };
+      appState.tasks.unshift(newChore);
+      document.getElementById('choreTitleInput').value = '';
+      document.getElementById('choreNotesInput').value = '';
+      closeChoreModal();
+      broadcastAction('task_add', newChore, {
+        title: `🔔 ${appState.currentUser} 新增咗家務！`,
+        body: `${newChore.title}（指派俾：${newChore.assignee}）`,
+        fullText: `${appState.currentUser} 新增家務：${newChore.title}（負責人：${newChore.assignee}）`
+      });
+    }
+
+    function handleSaveExpense(e) {
+      e.preventDefault();
+      const title = document.getElementById('expTitleInput').value.trim();
+      const amount = parseFloat(document.getElementById('expAmountInput').value);
+      const expDate = document.getElementById('expDateInput').value || todayStr;
+      if (!title || isNaN(amount)) return;
+      const newExp = {
+        id: 'e_' + Date.now(),
+        title,
+        amount,
+        paidBy: document.getElementById('expPaidBySelect').value,
+        householdId: document.getElementById('expHouseholdSelect').value,
+        category: document.getElementById('expCategorySelect').value,
+        date: expDate,
+        updatedAt: Date.now(),
+        deleted: false
+      };
+      appState.expenses.unshift(newExp);
+      document.getElementById('expTitleInput').value = '';
+      document.getElementById('expAmountInput').value = '';
+      closeExpenseModal();
+      broadcastAction('expense_add', newExp, {
+        title: `💰 ${appState.currentUser} 記低咗新開支！`,
+        body: `${newExp.title} (HK$ ${newExp.amount})`,
+        fullText: `${appState.currentUser} 新增開支：${newExp.title} - HK$ ${newExp.amount}（${newExp.paidBy} 畀錢）`
+      });
+    }
+
+    function openChoreModal() {
+      document.getElementById('choreHouseholdSelect').innerHTML = appState.households.filter(h => !h.deleted).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+      document.getElementById('choreAssigneeSelect').innerHTML = appState.members.filter(m => !m.deleted).map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+      document.getElementById('choreCategorySelect').innerHTML = appState.choreCategories.filter(c => !c.deleted).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      document.getElementById('chorePlannedDateInput').value = todayStr;
+      document.getElementById('choreDueDateInput').value = todayStr;
+      document.getElementById('choreModal').classList.remove('hidden');
+    }
+    function closeChoreModal() { document.getElementById('choreModal').classList.add('hidden'); }
+
+    function openExpenseModal() {
+      document.getElementById('expHouseholdSelect').innerHTML = appState.households.filter(h => !h.deleted).map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+      document.getElementById('expPaidBySelect').innerHTML = appState.members.filter(m => !m.deleted).map(m => `<option value="${m.name}" ${m.name === appState.currentUser ? 'selected' : ''}>${m.name}</option>`).join('');
+      document.getElementById('expCategorySelect').innerHTML = appState.expenseCategories.filter(c => !c.deleted).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      document.getElementById('expDateInput').value = todayStr;
+      document.getElementById('expenseModal').classList.remove('hidden');
+    }
+    function closeExpenseModal() { document.getElementById('expenseModal').classList.add('hidden'); }
+
+    function toggleDueInputs(show) {
+      document.getElementById('dueInputsRow').classList.toggle('hidden', !show);
+    }
+
+    function switchTab(tab) {
+      appState.activeTab = tab;
+      ['tasks', 'expenses', 'notifications', 'management', 'sync'].forEach(t => {
+        document.getElementById(`view${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tabBtn_${t}`);
+        if (btn) {
+          btn.className = `flex flex-col items-center gap-1 py-1 transition-all ${t === tab ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`;
+        }
+      });
+      renderAll();
+    }
+
+    function switchAdminSubTab(sub) {
+      appState.adminSubTab = sub;
+      ['members', 'choreCats', 'expenseCats', 'households'].forEach(s => {
+        const btn = document.getElementById(`adminSubBtn_${s}`);
+        if (btn) {
+          btn.className = `px-3 py-2 rounded-2xl text-xs font-bold transition-all ${s === sub ? 'bg-emerald-500 text-white shadow-xs' : 'text-slate-600'}`;
+        }
+      });
+      renderAdminPanel();
+    }
+
+    function setSpaceFilter(id) { appState.currentSpaceId = id; renderAll(); }
+    function setMemberFilter(name) { appState.selectedMemberFilter = name; renderAll(); }
+    function setTaskStatusFilter(status) {
+      appState.taskFilter = status;
+      ['pending', 'completed', 'all'].forEach(s => {
+        const btn = document.getElementById(`statusBtn_${s}`);
+        btn.className = `px-3 py-1 rounded-lg transition-all ${s === status ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'}`;
+      });
+      renderTasks();
+    }
+
+    function handleCurrentUserChange(val) {
+      appState.currentUser = val;
+      saveState(true);
+    }
+
+    function openAppNameModal() {
+      openCustomPrompt('更改家族 / App 名稱', appState.appName, (name) => {
+        if (name && name.trim()) {
+          appState.appName = name.trim();
+          saveState();
+        }
+      });
+    }
+
+    function addMemberAction() {
+      const name = document.getElementById('newMemberNameInput').value.trim();
+      if (!name) return;
+      appState.members.push({ id: 'm_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
+      saveState();
+    }
+    function renameMemberAction(id, oldName) {
+      openCustomPrompt(`將「${oldName}」更改為：`, oldName, (newName) => {
+        if (newName && newName.trim() && newName.trim() !== oldName) {
+          const trimmed = newName.trim();
+          const nowTs = Date.now();
+          const m = appState.members.find(x => x.id === id);
+          if (m) { m.name = trimmed; m.updatedAt = nowTs; }
+          appState.tasks.forEach(t => { if (t.assignee === oldName) { t.assignee = trimmed; t.updatedAt = nowTs; } });
+          appState.expenses.forEach(e => { if (e.paidBy === oldName) { e.paidBy = trimmed; e.updatedAt = nowTs; } });
+          if (appState.currentUser === oldName) appState.currentUser = trimmed;
+          if (appState.selectedMemberFilter === oldName) appState.selectedMemberFilter = trimmed;
+          saveState();
+          showPushBanner('✅ 成員名稱已更新', `「${oldName}」已改為「${trimmed}」，所有關聯家務與開支已同步更新`, '管理中心');
+        }
+      });
+    }
+    function deleteMemberAction(id) {
+      const m = appState.members.find(x => x.id === id);
+      if (m) {
+        openCustomConfirm('刪除家庭成員', `確定刪除「${m.name}」？已分派的家務與開支紀錄將保留。`, () => {
+          m.deleted = true;
+          m.updatedAt = Date.now();
+          saveState();
+        });
+      }
+    }
+
+    function addHouseholdAction() {
+      const name = document.getElementById('newHouseholdNameInput').value.trim();
+      if (!name) return;
+      appState.households.push({ id: 'h_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
+      saveState();
+    }
+    function renameHouseholdAction(id, oldName) {
+      openCustomPrompt('更改空間物業名稱：', oldName, (name) => {
+        if (name && name.trim()) {
+          const h = appState.households.find(x => x.id === id);
+          if (h) { h.name = name.trim(); h.updatedAt = Date.now(); saveState(); }
+        }
+      });
+    }
+    function deleteHouseholdAction(id) {
+      const h = appState.households.find(x => x.id === id);
+      if (h) {
+        openCustomConfirm('刪除空間物業', `確定刪除「${h.name}」？`, () => {
+          h.deleted = true;
+          h.updatedAt = Date.now();
+          if (appState.currentSpaceId === id) appState.currentSpaceId = 'ALL';
+          saveState();
+        });
+      }
+    }
+
+    function addCategoryAction(isChore) {
+      const name = document.getElementById('newCatInput').value.trim();
+      if (!name) return;
+      const list = isChore ? appState.choreCategories : appState.expenseCategories;
+      list.push({ id: 'c_' + Date.now(), name, updatedAt: Date.now(), deleted: false });
+      saveState();
+    }
+    function renameCategoryAction(id, oldName, isChore) {
+      openCustomPrompt('更改類別名稱：', oldName, (name) => {
+        if (name && name.trim()) {
+          const list = isChore ? appState.choreCategories : appState.expenseCategories;
+          const c = list.find(x => x.id === id);
+          if (c) { c.name = name.trim(); c.updatedAt = Date.now(); saveState(); }
+        }
+      });
+    }
+    function deleteCategoryAction(id, isChore) {
+      const list = isChore ? appState.choreCategories : appState.expenseCategories;
+      const c = list.find(x => x.id === id);
+      if (c) {
+        openCustomConfirm('刪除類別', `確定刪除類別「${c.name}」？`, () => {
+          c.deleted = true;
+          c.updatedAt = Date.now();
+          saveState();
+        });
+      }
+    }
+
+    function clearActivityLogs() {
+      appState.activityLogs = [];
+      saveState(true);
+    }
+
+    function updateMorningTime(val) {
+      if (!val) return;
+      appState.notificationSettings.morningTime = val;
+      saveState();
+      showPushBanner('⏰ 提醒時間已更新', `每日早晨提醒已設定為 ${val}`, '系統設定');
+    }
+
+    let currentRoomCode = localStorage.getItem('HOMESYNC_ROOM_CODE') || '';
+    let syncChannel = null;
+
+    function initSafeSyncChannel() {
+      try {
+        if ('BroadcastChannel' in window) {
+          if (syncChannel) syncChannel.close();
+          syncChannel = new BroadcastChannel('homesync_hk_p2p_bus');
+          syncChannel.onmessage = (event) => {
+            const data = event.data;
+            if (!data || data.roomCode !== currentRoomCode) return;
+
+            if (data.type === 'SYNC_HANDSHAKE') {
+              appState.tasks = mergeCRDTLists(appState.tasks, data.state.tasks || []);
+              appState.expenses = mergeCRDTLists(appState.expenses, data.state.expenses || []);
+              appState.households = mergeCRDTLists(appState.households, data.state.households || []);
+              appState.members = mergeCRDTLists(appState.members, data.state.members || []);
+              saveState(true);
+            } else if (data.type === 'BROADCAST_ACTIVITY') {
+              appState.tasks = mergeCRDTLists(appState.tasks, data.fullState.tasks || []);
+              appState.expenses = mergeCRDTLists(appState.expenses, data.fullState.expenses || []);
+              appState.members = mergeCRDTLists(appState.members, data.fullState.members || []);
+              addActivityLog(data.notification.fullText, 'remote_broadcast');
+              showPushBanner(data.notification.title, data.notification.body, '家人即時廣播');
+              saveState(true);
+            }
+          };
+        }
+      } catch (e) {}
+    }
+
+    function copySyncCodeWhatsApp() {
+      const dataStr = btoa(encodeURIComponent(JSON.stringify(appState)));
+      const text = `【家友記同步碼】請複製貼上至家友記：\n${dataStr}`;
+      navigator.clipboard.writeText(text);
+      showPushBanner('📋 同步碼已複製！', '可直接貼上至 WhatsApp 傳送給屋企人進行智能合併', '離線同步碼');
+    }
+
+    function importSyncCodePrompt() {
+      openCustomPrompt('請貼上 WhatsApp 收到的同步碼：', '', (raw) => {
+        if (!raw) return;
+        try {
+          const jsonStr = decodeURIComponent(atob(raw.replace(/【.*】/g, '').trim()));
+          const remote = JSON.parse(jsonStr);
+          appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+          appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+          appState.households = mergeCRDTLists(appState.households, remote.households || []);
+          appState.members = mergeCRDTLists(appState.members, remote.members || []);
+          saveState();
+          showPushBanner('🔄 同步碼匯入成功！', '已將家人的家務與開支無損合併至本機', '智能合併');
+        } catch (e) {
+          showPushBanner('❌ 同步碼格式無效', '請確認複製了完整的 WhatsApp 同步碼字串', '匯入錯誤');
+        }
+      });
+    }
+
+    function requestNativeNotificationPermission() {
+      if ('Notification' in window) {
+        Notification.requestPermission().then(p => {
+          if (p === 'granted') {
+            showPushBanner('✅ 系統通知已啟用', '你將會收到即時瀏覽器推播通知', '權限設定');
+          } else {
+            showPushBanner('🔔 已啟用 App 內置頂部橫幅通知', '即使在預覽環境中，仍可透過頂部浮動通知與音效接收即時提醒', '通知設定');
+          }
+        }).catch(() => {
+          showPushBanner('🔔 已啟用 App 內置頂部橫幅通知', '系統將使用頂部動態橫幅與提示音為你推播', '通知設定');
+        });
+      }
+    }
+
+    window.onload = function () {
+      const timeInput = document.getElementById('morningRemindTimeInput');
+      if (timeInput && appState.notificationSettings) {
+        timeInput.value = appState.notificationSettings.morningTime || '08:30';
+      }
+      renderAll();
+      initSafeSyncChannel();
+    };
+  </script>
+
+  <!-- ================= 🔥 內置你專屬網址嘅 FIREBASE 房間同步引擎 ================= -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const FIREBASE_DATABASE_URL = "https://kiu-s-project-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+    const app = initializeApp({ databaseURL: FIREBASE_DATABASE_URL });
+    const db = getDatabase(app);
+
+    let roomUnsubscribe = null;
+    let lastHandledBroadcastId = null;
+
+    // 加入或建立雲端房間 (只需房號)
+    window.joinCloudRoom = async function(code) {
+      const cleanCode = (code || '').trim().toUpperCase();
+      if (!cleanCode) return;
+
+      currentRoomCode = cleanCode;
+      localStorage.setItem('HOMESYNC_ROOM_CODE', currentRoomCode);
+      initSafeSyncChannel();
+
+      if (roomUnsubscribe) roomUnsubscribe();
+
+      const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
+
+      try {
+        const snap = await get(roomRef);
+        if (snap.exists()) {
+          const remote = snap.val();
+          appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+          appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+          appState.households = mergeCRDTLists(appState.households, remote.households || []);
+          appState.members = mergeCRDTLists(appState.members, remote.members || []);
+          appState.choreCategories = mergeCRDTLists(appState.choreCategories, remote.choreCategories || []);
+          appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
+          if (remote.appName) appState.appName = remote.appName;
+          saveState(true);
+        }
+        await window.pushStateToFirebase();
+      } catch (e) {
+        console.error('Room initial fetch error:', e);
+      }
+
+      roomUnsubscribe = onValue(roomRef, (snapshot) => {
+        const remote = snapshot.val();
+        if (!remote) return;
+
+        appState.tasks = mergeCRDTLists(appState.tasks, remote.tasks || []);
+        appState.expenses = mergeCRDTLists(appState.expenses, remote.expenses || []);
+        appState.households = mergeCRDTLists(appState.households, remote.households || []);
+        appState.members = mergeCRDTLists(appState.members, remote.members || []);
+        appState.choreCategories = mergeCRDTLists(appState.choreCategories, remote.choreCategories || []);
+        appState.expenseCategories = mergeCRDTLists(appState.expenseCategories, remote.expenseCategories || []);
+        if (remote.appName) appState.appName = remote.appName;
+
+        if (remote.lastBroadcast && remote.lastBroadcast.id !== lastHandledBroadcastId) {
+          lastHandledBroadcastId = remote.lastBroadcast.id;
+          if (remote.lastBroadcast.actor !== appState.currentUser && (Date.now() - remote.lastBroadcast.timestamp < 30000)) {
+            showPushBanner(remote.lastBroadcast.title, remote.lastBroadcast.body, `房間 #${currentRoomCode} 同步`);
+          }
+        }
+
+        saveState(true);
+      });
+
+      updateRoomUI();
+      showPushBanner('☁️ 房間已連通！', `已進入房間 #${currentRoomCode}，屋企人輸入同一個房號即可同步`, '雲端同步');
+    };
+
+    window.pushStateToFirebase = async function() {
+      if (!currentRoomCode) return;
+      try {
+        const roomRef = ref(db, `rooms/homesync_${currentRoomCode}`);
+        await set(roomRef, {
+          appName: appState.appName,
+          tasks: appState.tasks,
+          expenses: appState.expenses,
+          households: appState.households,
+          members: appState.members,
+          choreCategories: appState.choreCategories,
+          expenseCategories: appState.expenseCategories,
+          lastBroadcast: appState.lastBroadcast || null,
+          updatedAt: Date.now()
+        });
+      } catch (e) {
+        console.error('Push to Firebase error:', e);
+      }
+    };
+
+    // ✅ 新增：強制將本機最新狀態蓋過雲端舊殘留資料
+    window.forceOverwriteCloudRoom = async function() {
+      if (!currentRoomCode) {
+        showPushBanner('⚠️ 尚未入房', '請先連入房間', '提示');
+        return;
+      }
+      const nowTs = Date.now();
+      appState.members.forEach(m => m.updatedAt = nowTs);
+      appState.tasks.forEach(t => t.updatedAt = nowTs);
+      appState.expenses.forEach(e => e.updatedAt = nowTs);
+      appState.households.forEach(h => h.updatedAt = nowTs);
+      saveState();
+      await window.pushStateToFirebase();
+      showPushBanner('✅ 已強制覆蓋雲端！', `房間 #${currentRoomCode} 已完全同步為你目前手機嘅最新名單與清單`, '雲端同步');
+    };
+
+    window.connectToPeer = function() {
+      const inputVal = document.getElementById('targetPeerIdInput').value.trim();
+      if (!inputVal) {
+        showPushBanner('⚠️ 請輸入房號', '請輸入自訂房號（例如 MEOW）', '提示');
+        return;
+      }
+      window.joinCloudRoom(inputVal);
+    };
+
+    window.leaveCloudRoom = function() {
+      if (roomUnsubscribe) roomUnsubscribe();
+      roomUnsubscribe = null;
+      currentRoomCode = '';
+      localStorage.removeItem('HOMESYNC_ROOM_CODE');
+      updateRoomUI();
+      showPushBanner('👋 已離開房間', '目前已切換回本機單人模式', '房間狀態');
+    };
+
+    window.shareRoomLink = function() {
+      if (!currentRoomCode) {
+        showPushBanner('⚠️ 尚未入房', '請先輸入房號連入房間，再複製邀請連結', '提示');
+        return;
+      }
+      const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomCode}`;
+      navigator.clipboard.writeText(url);
+      showPushBanner('🔗 邀請連結已複製！', `Send 俾屋企人一撳即自動入 #${currentRoomCode} 房`, '邀請家人');
+    };
+
+    function updateRoomUI() {
+      const displayEl = document.getElementById('myPeerIdDisplay');
+      const inputEl = document.getElementById('targetPeerIdInput');
+      const labelEl = document.getElementById('syncStatusLabel');
+      const dotEl = document.getElementById('syncStatusDot');
+
+      if (currentRoomCode) {
+        if (displayEl) displayEl.innerText = `房號 #${currentRoomCode} (即時同步中)`;
+        if (inputEl) inputEl.value = currentRoomCode;
+        if (labelEl) labelEl.innerText = `☁️ 房號 #${currentRoomCode}`;
+        if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
+      } else {
+        if (displayEl) displayEl.innerText = '未入房 (單機模式)';
+        if (inputEl) inputEl.value = '';
+        if (labelEl) labelEl.innerText = '點此輸入房號同步';
+        if (dotEl) dotEl.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const roomFromUrl = params.get('room');
+      if (roomFromUrl) {
+        window.joinCloudRoom(roomFromUrl);
+      } else if (currentRoomCode) {
+        window.joinCloudRoom(currentRoomCode);
+      } else {
+        updateRoomUI();
+      }
+    });
+  </script>
+</body>
+</html>
